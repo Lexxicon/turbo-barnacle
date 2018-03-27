@@ -43,7 +43,7 @@ window.onload = function () {
     onWindowResize();
     window.addEventListener("resize", onWindowResize, false);
 
-    game = new BlendIn(scene, input);
+    game = new BlendIn(scene, camera, input);
 
   }
 

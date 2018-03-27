@@ -1,21 +1,28 @@
 import * as KeyCodes from "keycode-js";
-import { Mesh, Scene, Vector2 } from "three";
+import { Camera, Mesh, Scene, Vector2 } from "three";
 import * as THREE from "three";
+import { Dude } from "./dude";
 import { Input } from "./input";
 
 export class BlendIn {
-  private dude: Mesh;
   private dir: Vector2;
   private speed: number;
+  private pTime: number | undefined;
+  private delta: number;
 
-  constructor(private scene: Scene, private input: Input) {
-    const geo = new THREE.PlaneGeometry(1, 1, 1, 1);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffff00, side: THREE.DoubleSide });
-    this.dude = new THREE.Mesh(geo, mat);
+  private duder: Dude;
+
+  constructor(private scene: Scene, private camera: Camera, private input: Input) {
     this.dir = new THREE.Vector2(0, 0);
-    this.speed = 0.5;
-    scene.add(this.dude);
+    this.speed = 30;
+    this.delta = 0;
 
+    this.duder = new Dude(100);
+    for (let i = 0; i < 100; i++) {
+      this.duder.updatePosition(i, i % 10, Math.floor(i / 10));
+    }
+
+    scene.add(this.duder.getMesh());
   }
 
   public handleInput() {
@@ -38,10 +45,20 @@ export class BlendIn {
     }
   }
 
+  public move() {
+    this.duder.addPosition(4, this.dir.x * this.speed * this.delta, this.dir.y * this.speed * this.delta);
+  }
+
   public update(time: number) {
+    if (!this.pTime) {
+      this.pTime = time;
+      return;
+    }
+    this.delta = (time - this.pTime) / 1000;
+
     this.handleInput();
-    this.dude.position.x += this.dir.x * this.speed;
-    this.dude.position.y += this.dir.y * this.speed;
-    //
+    this.move();
+
+    this.pTime = time;
   }
 }
