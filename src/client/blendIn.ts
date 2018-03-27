@@ -14,12 +14,12 @@ export class BlendIn {
 
   constructor(private scene: Scene, private camera: Camera, private input: Input) {
     this.dir = new THREE.Vector2(0, 0);
-    this.speed = 30;
+    this.speed = 2;
     this.delta = 0;
 
     this.duder = new Dude(100);
     for (let i = 0; i < 100; i++) {
-      this.duder.updatePosition(i, i % 10, Math.floor(i / 10));
+      this.duder.updatePosition(i, (i % 10) * 1.2, Math.floor(i / 10) * 1.2);
     }
 
     scene.add(this.duder.getMesh());
@@ -58,7 +58,9 @@ export class BlendIn {
 
     this.handleInput();
     this.move();
-
+    for (let i = 0; i < 100; i++) {
+      this.duder.addPosition(i, Math.cos(time / 1000 + i) * 0.01, Math.sin(time / 1000 + i) * 0.01);
+    }
     this.pTime = time;
   }
 }

@@ -11,6 +11,8 @@ loader.load("./shaders/dude.frag", (d) => fragSrc = d);
 loader.load("./shaders/dude.vert", (d) => vertSrc = d);
 class Dude {
     constructor(count) {
+        this.scratchVector = new THREE.Vector2(0, 0);
+        const postionAtrbs = [];
         this.positions = [];
         this.colors = [];
         const base = new THREE.PlaneBufferGeometry(1, 1, 1, 1);
@@ -19,10 +21,11 @@ class Dude {
         this.geometry.addAttribute("position", base.getAttribute("position"));
         this.geometry.addAttribute("uv", base.getAttribute("uv"));
         for (let i = 0; i < count; i++) {
-            this.positions.push(0, 0);
+            postionAtrbs.push(0, 0);
+            this.positions.push(new THREE.Vector2(0, 0));
             this.colors.push(Math.random(), Math.random(), Math.random());
         }
-        this.positionAttribute = new THREE.InstancedBufferAttribute(new Float32Array(this.positions), 2).setDynamic(true);
+        this.positionAttribute = new THREE.InstancedBufferAttribute(new Float32Array(postionAtrbs), 2).setDynamic(true);
         this.colorAttribute = new THREE.InstancedBufferAttribute(new Float32Array(this.colors), 3);
         this.geometry.addAttribute("offset", this.positionAttribute);
         this.geometry.addAttribute("color", this.colorAttribute);
@@ -36,15 +39,14 @@ class Dude {
         return this.mesh;
     }
     updatePosition(i, x, y) {
-        this.positions[i * 2] = x;
-        this.positions[i * 2 + 1] = y;
+        this.positions[i].set(x, y);
         this.positionAttribute.setXY(i, x, y);
         this.positionAttribute.needsUpdate = true;
     }
     addPosition(i, x, y) {
-        this.positions[i * 2] += x;
-        this.positions[i * 2 + 1] += y;
-        this.positionAttribute.setXY(i, this.positions[i * 2], this.positions[i * 2 + 1]);
+        this.scratchVector.set(x, y);
+        this.positions[i].add(this.scratchVector);
+        this.positionAttribute.setXY(i, this.positions[i].x, this.positions[i].y);
         this.positionAttribute.needsUpdate = true;
     }
 }
@@ -56,11 +58,11 @@ class BlendIn {
         this.camera = camera;
         this.input = input;
         this.dir = new THREE.Vector2(0, 0);
-        this.speed = 30;
+        this.speed = 2;
         this.delta = 0;
         this.duder = new Dude(100);
         for (let i = 0; i < 100; i++) {
-            this.duder.updatePosition(i, i % 10, Math.floor(i / 10));
+            this.duder.updatePosition(i, (i % 10) * 1.2, Math.floor(i / 10) * 1.2);
         }
         scene.add(this.duder.getMesh());
     }
@@ -93,6 +95,9 @@ class BlendIn {
         this.delta = (time - this.pTime) / 1000;
         this.handleInput();
         this.move();
+        for (let i = 0; i < 100; i++) {
+            this.duder.addPosition(i, Math.cos(time / 1000 + i) * 0.01, Math.sin(time / 1000 + i) * 0.01);
+        }
         this.pTime = time;
     }
 }

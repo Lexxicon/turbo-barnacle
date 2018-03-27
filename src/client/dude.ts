@@ -19,7 +19,7 @@ loader.load("./shaders/dude.frag", (d) => fragSrc = d);
 loader.load("./shaders/dude.vert", (d) => vertSrc = d);
 
 export class Dude {
-  private positions: number[];
+  private positions: Vector2[];
   private colors: number[];
 
   private geometry: InstancedBufferGeometry;
@@ -29,7 +29,10 @@ export class Dude {
 
   private mesh: Mesh;
 
+  private scratchVector: Vector2 = new THREE.Vector2(0, 0);
+
   constructor(count: number) {
+    const postionAtrbs = [];
     this.positions = [];
     this.colors = [];
 
@@ -42,11 +45,12 @@ export class Dude {
     this.geometry.addAttribute("uv", base.getAttribute("uv"));
 
     for (let i = 0; i < count; i++) {
-      this.positions.push(0, 0);
+      postionAtrbs.push(0, 0);
+      this.positions.push(new THREE.Vector2(0, 0));
       this.colors.push(Math.random(), Math.random(), Math.random());
     }
 
-    this.positionAttribute = new THREE.InstancedBufferAttribute(new Float32Array(this.positions), 2).setDynamic(true);
+    this.positionAttribute = new THREE.InstancedBufferAttribute(new Float32Array(postionAtrbs), 2).setDynamic(true);
     this.colorAttribute = new THREE.InstancedBufferAttribute(new Float32Array(this.colors), 3);
 
     this.geometry.addAttribute("offset", this.positionAttribute);
@@ -65,16 +69,16 @@ export class Dude {
   }
 
   public updatePosition(i: number, x: number, y: number) {
-    this.positions[i * 2] = x;
-    this.positions[i * 2 + 1] = y;
+    this.positions[i].set(x, y);
     this.positionAttribute.setXY(i, x, y);
     this.positionAttribute.needsUpdate = true;
   }
 
   public addPosition(i: number, x: number, y: number) {
-    this.positions[i * 2] += x;
-    this.positions[i * 2 + 1] += y;
-    this.positionAttribute.setXY(i, this.positions[i * 2], this.positions[i * 2 + 1]);
+    this.scratchVector.set(x, y);
+
+    this.positions[i].add(this.scratchVector);
+    this.positionAttribute.setXY(i, this.positions[i].x, this.positions[i].y);
     this.positionAttribute.needsUpdate = true;
   }
 }
