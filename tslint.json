@@ -1,0 +1,62 @@
+{
+  "extends": [
+    "tslint:recommended"
+  ],
+  "enable": true,
+  "rules": {
+    "member-ordering": [
+      false
+    ],
+    "prefer-for-of": false,
+    "forin": false,
+    "interface-name": [
+      false
+    ],
+    "no-console": [
+      false
+    ],
+    "space-before-function-paren": false,
+    "object-literal-sort-keys": false,
+    "only-arrow-functions": [
+      false
+    ],
+    "no-namespace": [
+      false
+    ],
+    "trailing-comma": [
+      true,
+      "never"
+    ],
+    "quotemark": [
+      true,
+      "double",
+      "avoid-escape"
+    ],
+    "variable-name": [
+      true,
+      "ban-keywords",
+      "check-format",
+      "allow-pascal-case",
+      "allow-leading-underscore"
+    ],
+    "one-line": [
+      true,
+      "check-catch",
+      "check-else",
+      "check-open-brace",
+      "check-whitespace"
+    ],
+    "whitespace": [
+      true,
+      "check-branch",
+      "check-decl",
+      "check-operator",
+      "check-separator",
+      "check-type"
+    ],
+    "semicolon": [
+      true,
+      "always"
+    ]
+  }
+}
