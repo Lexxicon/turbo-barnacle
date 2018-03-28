@@ -9,45 +9,93 @@ let fragSrc;
 let vertSrc;
 loader.load("./shaders/dude.frag", (d) => fragSrc = d);
 loader.load("./shaders/dude.vert", (d) => vertSrc = d);
+const asBuffer = (a, size) => {
+    const ar = new Float32Array(size);
+    ar.set(flatten(a));
+    return ar;
+};
+const flatten = (a) => {
+    const mapped = a.map((v) => v.toArray());
+    return Array.prototype.concat.apply([], a.map((v) => v.toArray()));
+};
 class Dude {
     constructor(count) {
+        this.currentSize = 0;
         this.scratchVector = new THREE.Vector2(0, 0);
-        const postionAtrbs = [];
+        this.isPosDirty = true;
+        this.isColorDirty = true;
+        this.bufferSize = count;
         this.positions = [];
-        this.colors = [];
+        this.color = [];
         const base = new THREE.PlaneBufferGeometry(1, 1, 1, 1);
         this.geometry = new THREE.InstancedBufferGeometry();
+        this.geometry.maxInstancedCount = count;
         this.geometry.index = base.index;
         this.geometry.addAttribute("position", base.getAttribute("position"));
         this.geometry.addAttribute("uv", base.getAttribute("uv"));
-        for (let i = 0; i < count; i++) {
-            postionAtrbs.push(0, 0);
-            this.positions.push(new THREE.Vector2(0, 0));
-            this.colors.push(Math.random(), Math.random(), Math.random());
-        }
-        this.positionAttribute = new THREE.InstancedBufferAttribute(new Float32Array(postionAtrbs), 2).setDynamic(true);
-        this.colorAttribute = new THREE.InstancedBufferAttribute(new Float32Array(this.colors), 3);
+        this.positionAttribute = new THREE.InstancedBufferAttribute(new Float32Array(count * 2), 2);
+        this.positionAttribute.setDynamic(true);
+        this.colorAttribute = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
         this.geometry.addAttribute("offset", this.positionAttribute);
         this.geometry.addAttribute("color", this.colorAttribute);
-        const material = new THREE.RawShaderMaterial({
+        this.material = new THREE.RawShaderMaterial({
             vertexShader: vertSrc,
             fragmentShader: fragSrc
         });
-        this.mesh = new THREE.Mesh(this.geometry, material);
+        this.mesh = new THREE.Mesh(this.geometry, this.material);
+    }
+    getCurrentSize() {
+        return this.currentSize;
+    }
+    getCount() {
+        return this.positions.length;
     }
     getMesh() {
         return this.mesh;
     }
+    addDude(x, y) {
+        this.positions.push(new THREE.Vector2(x, y));
+        this.color.push(new THREE.Vector3(Math.random(), Math.random(), Math.random()));
+        this.isPosDirty = true;
+        this.isColorDirty = true;
+    }
+    delete(i) {
+        this.positions.splice(i, 1);
+        this.color.splice(i, 1);
+        this.isPosDirty = true;
+        this.isColorDirty = true;
+    }
+    rebuild() {
+        if (this.isColorDirty || this.isPosDirty) {
+            this.currentSize = this.positions.length;
+            this.geometry.maxInstancedCount = this.currentSize;
+        }
+        else {
+            return;
+        }
+        if (this.isPosDirty) {
+            this.isPosDirty = false;
+            this.positionAttribute.setArray(asBuffer(this.positions, this.bufferSize * 2));
+            this.positionAttribute.needsUpdate = true;
+        }
+        if (this.isColorDirty) {
+            this.isColorDirty = false;
+            this.colorAttribute.setArray(asBuffer(this.color, this.bufferSize * 3));
+            this.colorAttribute.needsUpdate = true;
+        }
+    }
     updatePosition(i, x, y) {
-        this.positions[i].set(x, y);
-        this.positionAttribute.setXY(i, x, y);
-        this.positionAttribute.needsUpdate = true;
+        this.positions[i].x = x;
+        this.positions[i].y = y;
+        this.isPosDirty = true;
+    }
+    getPosition(i) {
+        return this.positions[i];
     }
     addPosition(i, x, y) {
         this.scratchVector.set(x, y);
         this.positions[i].add(this.scratchVector);
-        this.positionAttribute.setXY(i, this.positions[i].x, this.positions[i].y);
-        this.positionAttribute.needsUpdate = true;
+        this.isPosDirty = true;
     }
 }
 //# sourceMappingURL=dude.js.map
@@ -57,14 +105,23 @@ class BlendIn {
         this.scene = scene;
         this.camera = camera;
         this.input = input;
+        this.keyBinds = {};
+        this.createCube = () => {
+            this.duder.addDude(this.duder.getPosition(0).x, this.duder.getPosition(0).y);
+        };
         this.dir = new THREE.Vector2(0, 0);
         this.speed = 2;
         this.delta = 0;
+        camera.position.x = 5;
+        camera.position.y = 5;
+        camera.position.z = 15;
         this.duder = new Dude(100);
-        for (let i = 0; i < 100; i++) {
-            this.duder.updatePosition(i, (i % 10) * 1.2, Math.floor(i / 10) * 1.2);
-        }
+        this.duder.addDude(0, 0);
         scene.add(this.duder.getMesh());
+        input.keyHandler = (code) => { if (this.keyBinds[code] !== undefined) {
+            this.keyBinds[code]();
+        } };
+        this.keyBinds[KeyCodes.KEY_SPACE] = this.createCube;
     }
     handleInput() {
         this.dir.set(0, 0);
@@ -85,17 +142,18 @@ class BlendIn {
         }
     }
     move() {
-        this.duder.addPosition(4, this.dir.x * this.speed * this.delta, this.dir.y * this.speed * this.delta);
+        this.duder.addPosition(0, this.dir.x * this.speed * this.delta, this.dir.y * this.speed * this.delta);
     }
     update(time) {
         if (!this.pTime) {
             this.pTime = time;
             return;
         }
+        this.duder.rebuild();
         this.delta = (time - this.pTime) / 1000;
         this.handleInput();
         this.move();
-        for (let i = 0; i < 100; i++) {
+        for (let i = 1; i < this.duder.getCount(); i++) {
             this.duder.addPosition(i, Math.cos(time / 1000 + i) * 0.01, Math.sin(time / 1000 + i) * 0.01);
         }
         this.pTime = time;
