@@ -1,5 +1,6 @@
+import * as Stats from "stats.js";
 import * as THREE from "three";
-import { OrthographicCamera, Scene, WebGLRenderer } from "three";
+import { Camera, OrthographicCamera, PerspectiveCamera, Scene, WebGLRenderer } from "three";
 import { BlendIn } from "./blendIn";
 import { Input } from "./input";
 
@@ -12,9 +13,11 @@ window.onload = function () {
 
   let game: BlendIn;
 
-  const frustumSize = 15;
+  const frustumSize = 160;
   const SCREEN_WIDTH = window.innerWidth;
   const SCREEN_HEIGHT = window.innerHeight;
+
+  const stats: Stats = new Stats();
 
   init();
   animate();
@@ -42,9 +45,8 @@ window.onload = function () {
 
     onWindowResize();
     window.addEventListener("resize", onWindowResize, false);
-
+    container.appendChild(stats.dom);
     game = new BlendIn(scene, camera, input);
-
   }
 
   function onWindowResize() {
@@ -65,6 +67,8 @@ window.onload = function () {
       game.update(timestamp);
     }
     renderer.render(scene, camera);
+
+    stats.update();
   }
 
 };

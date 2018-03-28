@@ -21,13 +21,18 @@ export class BlendIn {
     this.speed = 2;
     this.delta = 0;
 
-    camera.position.x = 5;
-    camera.position.y = 5;
-    camera.position.z = 15;
+    camera.position.x = 10;
+    camera.position.y = 15;
 
-    this.duder = new Dude(100);
+    this.duder = new Dude(1000000);
 
-    this.duder.addDude(0, 0);
+    // this.duder.addDude(0, 0);
+    const sqr = Math.floor(Math.sqrt(this.duder.getBufferSize()));
+    for (let i = 0; i < (sqr * sqr); i++) {
+      this.duder.addDude((i % sqr) * 0.1, Math.floor(i / sqr) * 0.1);
+    }
+    camera.position.x = sqr * 0.05;
+    camera.position.y = sqr * 0.05;
 
     scene.add(this.duder.getMesh());
 
@@ -69,14 +74,15 @@ export class BlendIn {
       this.pTime = time;
       return;
     }
-    this.duder.rebuild();
     this.delta = (time - this.pTime) / 1000;
+    this.duder.update(this.delta);
 
     this.handleInput();
-    this.move();
-    for (let i = 1; i < this.duder.getCount(); i++) {
-      this.duder.addPosition(i, Math.cos(time / 1000 + i) * 0.01, Math.sin(time / 1000 + i) * 0.01);
-    }
+    // this.move();
+    // for (let i = 1; i < this.duder.getCurrentSize(); i++) {
+    //   this.duder.addPosition(i, Math.cos(time / 1000 + i) * 0.01, Math.sin(time / 1000 + i) * 0.01);
+    // }
+
     this.pTime = time;
   }
 }

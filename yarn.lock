@@ -15,6 +15,10 @@
     "@types/express" "*"
     "@types/node" "*"
 
+"@types/dat.gui@^0.6.0":
+  version "0.6.0"
+  resolved "https://registry.yarnpkg.com/@types/dat.gui/-/dat.gui-0.6.0.tgz#3a2ee9b9f3e78ac132c6b5c6e54c92208bc4f35c"
+
 "@types/estree@*", "@types/estree@0.0.38":
   version "0.0.38"
   resolved "https://registry.yarnpkg.com/@types/estree/-/estree-0.0.38.tgz#c1be40aa933723c608820a99a373a16d215a1ca2"
@@ -68,6 +72,10 @@
   resolved "https://registry.yarnpkg.com/@types/socket.io/-/socket.io-1.4.32.tgz#bf7bc4ea6991327f31672c05e237a8a28d7bfc30"
   dependencies:
     "@types/node" "*"
+
+"@types/stats.js@^0.17.0":
+  version "0.17.0"
+  resolved "https://registry.yarnpkg.com/@types/stats.js/-/stats.js-0.17.0.tgz#0ed81d48e03b590c24da85540c1d952077a9fe20"
 
 "@types/three@^0.91.0":
   version "0.91.0"
@@ -1087,6 +1095,10 @@ sourcemap-codec@^1.4.1:
 sprintf-js@~1.0.2:
   version "1.0.3"
   resolved "https://registry.yarnpkg.com/sprintf-js/-/sprintf-js-1.0.3.tgz#04e6926f662895354f3dd015203633b857297e2c"
+
+stats-js@^1.0.0-alpha1:
+  version "1.0.0-alpha1"
+  resolved "https://registry.yarnpkg.com/stats-js/-/stats-js-1.0.0-alpha1.tgz#44ae82e6421123bab99750d95c3f5526b8f257db"
 
 "statuses@>= 1.3.1 < 2", statuses@~1.4.0:
   version "1.4.0"

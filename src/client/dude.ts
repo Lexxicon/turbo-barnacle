@@ -26,7 +26,15 @@ const asBuffer = (a: Array<Vector2 | Vector3>, size: number) => {
 };
 const flatten = (a: Array<Vector2 | Vector3>) => {
   const mapped: number[][] = a.map((v) => v.toArray());
-  return Array.prototype.concat.apply([], a.map((v) => v.toArray()));
+  const rslt: number[] = [];
+  const ln = mapped[0].length;
+  let j = 0;
+  for (let i = 0; i < mapped.length; i++) {
+    for (j = 0; j < ln; j++) {
+      rslt.push(mapped[i][j]);
+    }
+  }
+  return rslt;
 };
 
 export class Dude {
@@ -41,6 +49,7 @@ export class Dude {
 
   private positionAttribute: InstancedBufferAttribute;
   private colorAttribute: InstancedBufferAttribute;
+  private idAttribute: InstancedBufferAttribute;
 
   private mesh: Mesh;
 
@@ -49,12 +58,14 @@ export class Dude {
   private isPosDirty = true;
   private isColorDirty = true;
 
+  private uniforms: { time: { value: number }, stime: { value: number } };
+
   constructor(count: number) {
     this.bufferSize = count;
     this.positions = [];
     this.color = [];
-
-    const base = new THREE.PlaneBufferGeometry(1, 1, 1, 1);
+    this.uniforms = { time: { value: 1.0 }, stime: { value: 1.0 } };
+    const base = new THREE.PlaneBufferGeometry(.3, .3, 1, 1);
 
     this.geometry = new THREE.InstancedBufferGeometry();
     this.geometry.maxInstancedCount = count;
@@ -66,11 +77,17 @@ export class Dude {
     this.positionAttribute.setDynamic(true);
 
     this.colorAttribute = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
-
+    const ids: number[] = [];
+    for (let i = 0; i < count; i++) {
+      ids.push(i);
+    }
+    this.idAttribute = new THREE.InstancedBufferAttribute(new Float32Array(ids), 1);
+    this.geometry.addAttribute("id", this.idAttribute);
     this.geometry.addAttribute("offset", this.positionAttribute);
     this.geometry.addAttribute("color", this.colorAttribute);
 
     this.material = new THREE.RawShaderMaterial({
+      uniforms: this.uniforms,
       vertexShader: vertSrc,
       fragmentShader: fragSrc
     });
@@ -82,8 +99,8 @@ export class Dude {
     return this.currentSize;
   }
 
-  public getCount() {
-    return this.positions.length;
+  public getBufferSize() {
+    return this.bufferSize;
   }
 
   public getMesh() {
@@ -106,7 +123,13 @@ export class Dude {
     this.isColorDirty = true;
   }
 
-  public rebuild() {
+  public update(time: number) {
+    this.uniforms.time.value += time;
+    this.uniforms.stime.value = Math.sin(this.uniforms.time.value);
+    this.rebuild();
+  }
+
+  private rebuild() {
     if (this.isColorDirty || this.isPosDirty) {
       this.currentSize = this.positions.length;
       this.geometry.maxInstancedCount = this.currentSize;

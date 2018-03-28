@@ -1,8 +1,8 @@
 (function (global, factory) {
-	typeof exports === 'object' && typeof module !== 'undefined' ? factory(require('three'), require('keycode-js')) :
-	typeof define === 'function' && define.amd ? define(['three', 'keycode-js'], factory) :
-	(factory(global.THREE,global.KeyCode));
-}(this, (function (THREE,KeyCodes) { 'use strict';
+	typeof exports === 'object' && typeof module !== 'undefined' ? factory(require('three'), require('keycode-js'), require('stats.js')) :
+	typeof define === 'function' && define.amd ? define(['three', 'keycode-js', 'stats.js'], factory) :
+	(factory(global.THREE,global.KeyCode,global.Stats));
+}(this, (function (THREE,KeyCodes,Stats) { 'use strict';
 
 const loader = new THREE.FileLoader();
 let fragSrc;
@@ -16,7 +16,15 @@ const asBuffer = (a, size) => {
 };
 const flatten = (a) => {
     const mapped = a.map((v) => v.toArray());
-    return Array.prototype.concat.apply([], a.map((v) => v.toArray()));
+    const rslt = [];
+    const ln = mapped[0].length;
+    let j = 0;
+    for (let i = 0; i < mapped.length; i++) {
+        for (j = 0; j < ln; j++) {
+            rslt.push(mapped[i][j]);
+        }
+    }
+    return rslt;
 };
 class Dude {
     constructor(count) {
@@ -27,7 +35,8 @@ class Dude {
         this.bufferSize = count;
         this.positions = [];
         this.color = [];
-        const base = new THREE.PlaneBufferGeometry(1, 1, 1, 1);
+        this.uniforms = { time: { value: 1.0 }, stime: { value: 1.0 } };
+        const base = new THREE.PlaneBufferGeometry(.3, .3, 1, 1);
         this.geometry = new THREE.InstancedBufferGeometry();
         this.geometry.maxInstancedCount = count;
         this.geometry.index = base.index;
@@ -36,9 +45,16 @@ class Dude {
         this.positionAttribute = new THREE.InstancedBufferAttribute(new Float32Array(count * 2), 2);
         this.positionAttribute.setDynamic(true);
         this.colorAttribute = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+        const ids = [];
+        for (let i = 0; i < count; i++) {
+            ids.push(i);
+        }
+        this.idAttribute = new THREE.InstancedBufferAttribute(new Float32Array(ids), 1);
+        this.geometry.addAttribute("id", this.idAttribute);
         this.geometry.addAttribute("offset", this.positionAttribute);
         this.geometry.addAttribute("color", this.colorAttribute);
         this.material = new THREE.RawShaderMaterial({
+            uniforms: this.uniforms,
             vertexShader: vertSrc,
             fragmentShader: fragSrc
         });
@@ -47,8 +63,8 @@ class Dude {
     getCurrentSize() {
         return this.currentSize;
     }
-    getCount() {
-        return this.positions.length;
+    getBufferSize() {
+        return this.bufferSize;
     }
     getMesh() {
         return this.mesh;
@@ -64,6 +80,11 @@ class Dude {
         this.color.splice(i, 1);
         this.isPosDirty = true;
         this.isColorDirty = true;
+    }
+    update(time) {
+        this.uniforms.time.value += time;
+        this.uniforms.stime.value = Math.sin(this.uniforms.time.value);
+        this.rebuild();
     }
     rebuild() {
         if (this.isColorDirty || this.isPosDirty) {
@@ -112,11 +133,16 @@ class BlendIn {
         this.dir = new THREE.Vector2(0, 0);
         this.speed = 2;
         this.delta = 0;
-        camera.position.x = 5;
-        camera.position.y = 5;
-        camera.position.z = 15;
-        this.duder = new Dude(100);
-        this.duder.addDude(0, 0);
+        camera.position.x = 10;
+        camera.position.y = 15;
+        this.duder = new Dude(1000000);
+        // this.duder.addDude(0, 0);
+        const sqr = Math.floor(Math.sqrt(this.duder.getBufferSize()));
+        for (let i = 0; i < (sqr * sqr); i++) {
+            this.duder.addDude((i % sqr) * 0.1, Math.floor(i / sqr) * 0.1);
+        }
+        camera.position.x = sqr * 0.05;
+        camera.position.y = sqr * 0.05;
         scene.add(this.duder.getMesh());
         input.keyHandler = (code) => { if (this.keyBinds[code] !== undefined) {
             this.keyBinds[code]();
@@ -149,16 +175,17 @@ class BlendIn {
             this.pTime = time;
             return;
         }
-        this.duder.rebuild();
         this.delta = (time - this.pTime) / 1000;
+        this.duder.update(this.delta);
         this.handleInput();
-        this.move();
-        for (let i = 1; i < this.duder.getCount(); i++) {
-            this.duder.addPosition(i, Math.cos(time / 1000 + i) * 0.01, Math.sin(time / 1000 + i) * 0.01);
-        }
+        // this.move();
+        // for (let i = 1; i < this.duder.getCurrentSize(); i++) {
+        //   this.duder.addPosition(i, Math.cos(time / 1000 + i) * 0.01, Math.sin(time / 1000 + i) * 0.01);
+        // }
         this.pTime = time;
     }
 }
+//# sourceMappingURL=blendIn.js.map
 
 class Input {
     constructor() {
@@ -203,9 +230,10 @@ window.onload = function () {
     let renderer;
     let input;
     let game;
-    const frustumSize = 15;
+    const frustumSize = 160;
     const SCREEN_WIDTH = window.innerWidth;
     const SCREEN_HEIGHT = window.innerHeight;
+    const stats = new Stats();
     init();
     animate();
     function init() {
@@ -224,6 +252,7 @@ window.onload = function () {
         input = new Input();
         onWindowResize();
         window.addEventListener("resize", onWindowResize, false);
+        container.appendChild(stats.dom);
         game = new BlendIn(scene, camera, input);
     }
     function onWindowResize() {
@@ -241,9 +270,9 @@ window.onload = function () {
             game.update(timestamp);
         }
         renderer.render(scene, camera);
+        stats.update();
     }
 };
-//# sourceMappingURL=client.js.map
 
 })));
 //# sourceMappingURL=client.js.map

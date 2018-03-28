@@ -23,11 +23,13 @@ export default {
     format: "umd",
     globals: {
       three: "THREE",
-      "keycode-js": "KeyCode"
+      "keycode-js": "KeyCode",
+      dat: "dat",
+      "stats.js": "Stats"
     },
     sourcemap: true
   },
-  external: ["three", "keycode-js"],
+  external: ["three", "keycode-js", "dat", "stats.js"],
 
   plugins: [
     clean(),
