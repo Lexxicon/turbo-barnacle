@@ -1,12 +1,13 @@
 import * as Stats from "stats.js";
 import * as THREE from "three";
-import { Camera, OrthographicCamera, PerspectiveCamera, Scene, WebGLRenderer } from "three";
+import { Camera, OrbitControls, OrthographicCamera, PerspectiveCamera, Scene, WebGLRenderer } from "three";
 import { BlendIn } from "./blendIn";
 import { Input } from "./input";
-
+const ortho = false;
 window.onload = function () {
   let container: HTMLElement | null;
-  let camera: OrthographicCamera;
+  let camera: OrthographicCamera | PerspectiveCamera;
+  let controller: OrbitControls;
   let scene: Scene;
   let renderer: WebGLRenderer;
   let input: Input;
@@ -29,9 +30,12 @@ window.onload = function () {
     }
 
     const aspect = window.innerWidth / window.innerHeight;
-    camera = new THREE.OrthographicCamera(
-      frustumSize * aspect / - 2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / - 2, 1, 2000);
-    camera.position.set(3, 2.5, 15);
+    if (ortho) {
+      camera = new THREE.OrthographicCamera(
+        frustumSize * aspect / - 2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / - 2, 1, 2000);
+    } else {
+      camera = new THREE.PerspectiveCamera(30, SCREEN_WIDTH / SCREEN_HEIGHT, 1, 10000);
+    }
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0, 0, 0);
@@ -39,6 +43,7 @@ window.onload = function () {
     renderer = new THREE.WebGLRenderer();
     renderer.setPixelRatio(window.devicePixelRatio);
 
+    controller = new THREE.OrbitControls(camera, renderer.domElement);
     container.appendChild(renderer.domElement);
 
     input = new Input();
@@ -51,16 +56,26 @@ window.onload = function () {
 
   function onWindowResize() {
     const aspect = window.innerWidth / window.innerHeight;
-
-    camera.left = - frustumSize * aspect / 2;
-    camera.right = frustumSize * aspect / 2;
-    camera.top = frustumSize / 2;
-    camera.bottom = - frustumSize / 2;
+    if (isOrtho(camera)) {
+      camera.left = - frustumSize * aspect / 2;
+      camera.right = frustumSize * aspect / 2;
+      camera.top = frustumSize / 2;
+      camera.bottom = - frustumSize / 2;
+    }
+    if (isPers(camera)) {
+      camera.aspect = aspect;
+    }
     camera.updateProjectionMatrix();
 
     renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
+  function isOrtho(cam: Camera): cam is OrthographicCamera {
+    return ortho;
+  }
+  function isPers(cam: Camera): cam is PerspectiveCamera {
+    return !ortho;
+  }
   function animate(timestamp?: number) {
     requestAnimationFrame(animate);
     if (timestamp && !isNaN(timestamp)) {

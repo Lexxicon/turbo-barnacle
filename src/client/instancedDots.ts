@@ -21,26 +21,32 @@ loader.load("./shaders/dude.vert", (d) => vertSrc = d);
 
 const asBuffer = (a: Array<Vector2 | Vector3>, size: number) => {
   const ar = new Float32Array(size);
-  ar.set(flatten(a));
+  flatten(ar, a);
   return ar;
 };
-const flatten = (a: Array<Vector2 | Vector3>) => {
-  const mapped: number[][] = a.map((v) => v.toArray());
-  const rslt: number[] = [];
-  const ln = mapped[0].length;
-  let j = 0;
-  for (let i = 0; i < mapped.length; i++) {
-    for (j = 0; j < ln; j++) {
-      rslt.push(mapped[i][j]);
-    }
+
+const flatten = (dest: Float32Array, a: Array<Vector2 | Vector3>) => {
+  if (a.length === 0) {
+    return dest;
   }
-  return rslt;
+  const mapped: number[][] = a.map((v) => v.toArray());
+  const size = mapped[0].length;
+  for (let i = 0; i < mapped.length; i++) {
+    dest.set(mapped[i], i * size);
+  }
+  return dest;
 };
 
-export class Dude {
+export class Dots {
 
   private positions: Vector2[];
+  private positionBuffer: Float32Array;
+  private sizeOfPos = 2;
+
   private color: Vector3[];
+  private colorBuffer: Float32Array;
+  private sizeOfColor = 3;
+
   private bufferSize: number;
   private currentSize: number = 0;
 
@@ -55,17 +61,19 @@ export class Dude {
 
   private scratchVector: Vector2 = new THREE.Vector2(0, 0);
 
-  private isPosDirty = true;
-  private isColorDirty = true;
+  public isPosDirty = true;
+  public isColorDirty = true;
 
   private uniforms: { time: { value: number }, stime: { value: number } };
 
   constructor(count: number) {
     this.bufferSize = count;
     this.positions = [];
+    this.positionBuffer = new Float32Array(count * this.sizeOfPos);
     this.color = [];
+    this.colorBuffer = new Float32Array(count * this.sizeOfColor);
     this.uniforms = { time: { value: 1.0 }, stime: { value: 1.0 } };
-    const base = new THREE.PlaneBufferGeometry(.3, .3, 1, 1);
+    const base = new THREE.PlaneBufferGeometry(1, 1, 1, 1);
 
     this.geometry = new THREE.InstancedBufferGeometry();
     this.geometry.maxInstancedCount = count;
@@ -73,10 +81,10 @@ export class Dude {
     this.geometry.addAttribute("position", base.getAttribute("position"));
     this.geometry.addAttribute("uv", base.getAttribute("uv"));
 
-    this.positionAttribute = new THREE.InstancedBufferAttribute(new Float32Array(count * 2), 2);
+    this.positionAttribute = new THREE.InstancedBufferAttribute(this.positionBuffer, this.sizeOfPos);
     this.positionAttribute.setDynamic(true);
 
-    this.colorAttribute = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+    this.colorAttribute = new THREE.InstancedBufferAttribute(this.colorBuffer, this.sizeOfColor);
     const ids: number[] = [];
     for (let i = 0; i < count; i++) {
       ids.push(i);
@@ -107,7 +115,7 @@ export class Dude {
     return this.mesh;
   }
 
-  public addDude(x: number, y: number) {
+  public add(x: number, y: number) {
     this.positions.push(new THREE.Vector2(x, y));
     this.color.push(new THREE.Vector3(Math.random(), Math.random(), Math.random()));
 
@@ -124,8 +132,6 @@ export class Dude {
   }
 
   public update(time: number) {
-    this.uniforms.time.value += time;
-    this.uniforms.stime.value = Math.sin(this.uniforms.time.value);
     this.rebuild();
   }
 
@@ -136,14 +142,15 @@ export class Dude {
     } else {
       return;
     }
+
     if (this.isPosDirty) {
       this.isPosDirty = false;
-      this.positionAttribute.setArray(asBuffer(this.positions, this.bufferSize * 2));
+      this.positionAttribute.setArray(flatten(this.positionBuffer, this.positions));
       this.positionAttribute.needsUpdate = true;
     }
     if (this.isColorDirty) {
       this.isColorDirty = false;
-      this.colorAttribute.setArray(asBuffer(this.color, this.bufferSize * 3));
+      this.colorAttribute.setArray(flatten(this.colorBuffer, this.color));
       this.colorAttribute.needsUpdate = true;
     }
 

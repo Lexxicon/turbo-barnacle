@@ -1,23 +1,22 @@
 import { Vector2 } from "three";
 import { Rectangle } from "./rectangle";
 
-interface Entry<T> {
+interface Entry {
   point: Vector2;
-  data: T;
 }
 
-const merge = Array.prototype.push;
+const merge = (a: any[], b: any[]) => Array.prototype.push.apply(a, b);
 
-export class QuadTree<T> {
-  public content: Array<Entry<T>> = [];
+export class QuadTree<T extends Entry> {
+  public content: T[] = [];
 
   private split: boolean = false;
   private subTree: Array<QuadTree<T>> = [];
 
   constructor(public bounds: Rectangle, public thresh: number, private parent?: QuadTree<T>) { }
 
-  public validate(): Array<Entry<T>> {
-    let removed: Array<Entry<T>> = [];
+  public validate(): T[] {
+    let removed: T[] = [];
     this.evict(removed);
     let root: QuadTree<T> = this;
     while (root.parent !== undefined) {
@@ -40,25 +39,29 @@ export class QuadTree<T> {
     this.split = false;
   }
 
-  private evict(evicted: Array<Entry<T>>) {
+  private evict(evicted: T[]) {
     merge(evicted, this.content.filter((e) => !this.bounds.contains(e.point)));
     this.content = this.content.filter((e) => this.bounds.contains(e.point));
     this.subTree.forEach((t) => t.evict(evicted));
   }
 
-  public select(area: Rectangle): Array<Entry<T>> {
-    const result: Array<Entry<T>> = [];
+  public select(area: Rectangle): T[] {
+    const result: T[] = [];
     if (!area.intersects(this.bounds)) {
       return result;
     }
 
-    this.content.filter((e) => this.bounds.contains(e.point)).forEach((e) => result.push(e));
+    this.content.filter((e) => area.contains(e.point)).forEach((e) => result.push(e));
     this.subTree.map((tree) => tree.select(area)).forEach((e) => merge(result, e));
 
     return result;
   }
 
-  public add(item: Entry<T>) {
+  public size(): number {
+    return this.subTree.map((e) => e.size()).reduce((a, b) => a + b, this.content.length);
+  }
+
+  public add(item: T) {
     if (!this.bounds.contains(item.point)) {
       return false;
     }

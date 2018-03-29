@@ -3,8 +3,9 @@ import { Camera, Mesh, Scene, Vector2 } from "three";
 import * as THREE from "three";
 import { QuadTree } from "util/quadTree";
 import { Rectangle } from "util/rectangle";
-import { Dude } from "./dude";
+import { Flocking } from "./flocking";
 import { Input } from "./input";
+import { Dots } from "./instancedDots";
 
 export class BlendIn {
   private dir: Vector2;
@@ -12,7 +13,8 @@ export class BlendIn {
   private pTime: number | undefined;
   private delta: number;
 
-  private duder: Dude;
+  private duder: Dots;
+  private flock: Flocking;
 
   private keyBinds: { [code: number]: () => void } = {};
 
@@ -21,18 +23,20 @@ export class BlendIn {
     this.speed = 2;
     this.delta = 0;
 
-    camera.position.x = 10;
-    camera.position.y = 15;
+    this.duder = new Dots(3 * 3);
+    this.flock = new Flocking();
 
-    this.duder = new Dude(1000000);
-
-    // this.duder.addDude(0, 0);
     const sqr = Math.floor(Math.sqrt(this.duder.getBufferSize()));
     for (let i = 0; i < (sqr * sqr); i++) {
-      this.duder.addDude((i % sqr) * 0.1, Math.floor(i / sqr) * 0.1);
+      this.duder.add((i % sqr) * 0.5, Math.floor(i / sqr) * 0.5);
+      this.flock.add(this.duder.getPosition(i));
     }
-    camera.position.x = sqr * 0.05;
-    camera.position.y = sqr * 0.05;
+    // this.flock.add(new THREE.Vector2(2, 2));
+    // console.log(this.flock.selectArea(new Rectangle(0, 0, 5, 5)));
+
+    camera.position.x = sqr;
+    camera.position.y = sqr;
+    camera.position.z = 40;
 
     scene.add(this.duder.getMesh());
 
@@ -42,7 +46,7 @@ export class BlendIn {
   }
 
   public createCube = () => {
-    this.duder.addDude(this.duder.getPosition(0).x, this.duder.getPosition(0).y);
+    this.duder.add(this.duder.getPosition(0).x, this.duder.getPosition(0).y);
   }
 
   public handleInput() {
@@ -65,23 +69,18 @@ export class BlendIn {
     }
   }
 
-  public move() {
-    this.duder.addPosition(0, this.dir.x * this.speed * this.delta, this.dir.y * this.speed * this.delta);
-  }
-
   public update(time: number) {
     if (!this.pTime) {
       this.pTime = time;
       return;
     }
     this.delta = (time - this.pTime) / 1000;
+
+    this.flock.update(this.delta);
+    this.duder.isPosDirty = true;
     this.duder.update(this.delta);
 
     this.handleInput();
-    // this.move();
-    // for (let i = 1; i < this.duder.getCurrentSize(); i++) {
-    //   this.duder.addPosition(i, Math.cos(time / 1000 + i) * 0.01, Math.sin(time / 1000 + i) * 0.01);
-    // }
 
     this.pTime = time;
   }

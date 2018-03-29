@@ -12,14 +12,14 @@ export class Rectangle {
     if (tY === undefined) {
       throw new Error("no Y value");
     }
-    return tX > this.x && tX < this.x + this.w
-      && tY > this.y && tY < this.y + this.h;
+    return tX >= this.x && tX <= this.x + this.w
+      && tY >= this.y && tY <= this.y + this.h;
   }
 
   public intersects(test: Rectangle) {
-    return this.x < test.x + test.w &&
-      this.x + this.w > test.x &&
-      this.y < test.y + test.h &&
-      this.h + this.y > test.y;
+    return this.x <= test.x + test.w &&
+      this.x + this.w >= test.x &&
+      this.y <= test.y + test.h &&
+      this.h + this.y >= test.y;
   }
 }

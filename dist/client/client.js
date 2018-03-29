@@ -4,47 +4,241 @@
 	(factory(global.THREE,global.KeyCode,global.Stats));
 }(this, (function (THREE,KeyCodes,Stats) { 'use strict';
 
+class Rectangle {
+    constructor(x, y, w, h) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+    }
+    contains(tX, tY) {
+        if (!(typeof tX === "number")) {
+            tY = tX.y;
+            tX = tX.x;
+        }
+        if (tY === undefined) {
+            throw new Error("no Y value");
+        }
+        return tX >= this.x && tX <= this.x + this.w
+            && tY >= this.y && tY <= this.y + this.h;
+    }
+    intersects(test) {
+        return this.x <= test.x + test.w &&
+            this.x + this.w >= test.x &&
+            this.y <= test.y + test.h &&
+            this.h + this.y >= test.y;
+    }
+}
+//# sourceMappingURL=rectangle.js.map
+
+const merge = (a, b) => Array.prototype.push.apply(a, b);
+class QuadTree {
+    constructor(bounds, thresh, parent) {
+        this.bounds = bounds;
+        this.thresh = thresh;
+        this.parent = parent;
+        this.content = [];
+        this.split = false;
+        this.subTree = [];
+    }
+    validate() {
+        let removed = [];
+        this.evict(removed);
+        let root = this;
+        while (root.parent !== undefined) {
+            root = root.parent;
+        }
+        removed = removed.filter((e) => !root.add(e));
+        root.balance();
+        return removed;
+    }
+    balance() {
+        this.subTree.forEach((e) => e.balance());
+        if (!this.split) {
+            return;
+        }
+        const count = this.subTree.map((e) => e.content.length).reduce((a, b) => a + b, this.content.length);
+        if (count > this.thresh) {
+            return;
+        }
+        this.subTree.forEach((t) => merge(this.content, t.content));
+        this.subTree = [];
+        this.split = false;
+    }
+    evict(evicted) {
+        merge(evicted, this.content.filter((e) => !this.bounds.contains(e.point)));
+        this.content = this.content.filter((e) => this.bounds.contains(e.point));
+        this.subTree.forEach((t) => t.evict(evicted));
+    }
+    select(area) {
+        const result = [];
+        if (!area.intersects(this.bounds)) {
+            return result;
+        }
+        this.content.filter((e) => area.contains(e.point)).forEach((e) => result.push(e));
+        this.subTree.map((tree) => tree.select(area)).forEach((e) => merge(result, e));
+        return result;
+    }
+    size() {
+        return this.subTree.map((e) => e.size()).reduce((a, b) => a + b, this.content.length);
+    }
+    add(item) {
+        if (!this.bounds.contains(item.point)) {
+            return false;
+        }
+        if (this.content.length < this.thresh) {
+            this.content.push(item);
+            return true;
+        }
+        if (!this.split) {
+            this.subdivide();
+        }
+        for (const sub of this.subTree) {
+            if (sub.add(item)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    subdivide() {
+        if (this.split) {
+            return;
+        }
+        this.split = true;
+        const x = this.bounds.x;
+        const y = this.bounds.y;
+        const halfW = this.bounds.w / 2;
+        const halfH = this.bounds.h / 2;
+        this.subTree.push(new QuadTree(new Rectangle(x, y, halfH, halfW), this.thresh, this));
+        this.subTree.push(new QuadTree(new Rectangle(x + halfW, y, halfH, halfW), this.thresh, this));
+        this.subTree.push(new QuadTree(new Rectangle(x + halfW, y + halfH, halfH, halfW), this.thresh, this));
+        this.subTree.push(new QuadTree(new Rectangle(x, y + halfH, halfH, halfW), this.thresh, this));
+    }
+}
+//# sourceMappingURL=quadTree.js.map
+
+class Flocking {
+    constructor() {
+        this.worldSize = 15;
+        this.quadTree = new QuadTree(new Rectangle(0, 0, this.worldSize, this.worldSize), 4);
+        this.boids = [];
+    }
+    add(point) {
+        const b = {
+            point,
+            direction: new THREE.Vector2(1, 0),
+            velocity: 0
+        };
+        this.boids.push(b);
+        const add = this.quadTree.add(b);
+    }
+    update(delta) {
+        const sensorSize = 5;
+        const halfSize = sensorSize / 2;
+        const selectArea = new Rectangle(0, 0, sensorSize, sensorSize);
+        for (const boid of this.boids) {
+            selectArea.x = boid.point.x - halfSize;
+            selectArea.y = boid.point.y - halfSize;
+            const nearBy = this.selectArea(selectArea);
+            const avgPoint = nearBy.map((b) => b.loc).reduce((a, b) => ({ x: a.x + b.x, y: a.y + b.y }), { x: 0, y: 0 });
+            avgPoint.x /= nearBy.length;
+            avgPoint.y /= nearBy.length;
+            avgPoint.x -= boid.point.x;
+            avgPoint.y -= boid.point.y;
+            if (nearBy.length > 1 && avgPoint.x === avgPoint.x && avgPoint.y === avgPoint.y) {
+                boid.direction.set(avgPoint.x, avgPoint.y).normalize().negate();
+            }
+            boid.velocity = delta;
+        }
+        this.apply();
+        const r = this.quadTree.validate();
+        if (r.length > 0) {
+            console.log(r[0]);
+        }
+        for (const boid of r) {
+            this.quadTree.add(boid);
+        }
+    }
+    selectArea(selectArea) {
+        const nearBy = [];
+        const merge = (target, arr) => Array.prototype.push.apply(target, arr);
+        const origin = { x: selectArea.x, y: selectArea.y };
+        for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+                const offsetX = this.worldSize * i;
+                const offsetY = this.worldSize * j;
+                selectArea.x = origin.x + offsetX;
+                selectArea.y = origin.y + offsetY;
+                const rslt = this.quadTree.select(selectArea)
+                    .map((b) => ({ loc: { x: b.point.x - offsetX, y: b.point.y - offsetY }, boid: b }));
+                merge(nearBy, rslt);
+            }
+        }
+        return nearBy;
+    }
+    apply() {
+        const scratch = new THREE.Vector2(0.1, 0.1);
+        for (const b of this.boids) {
+            scratch.set(b.direction.x, b.direction.y);
+            b.point.add(scratch.multiplyScalar(b.velocity));
+            this.clamp(b);
+        }
+    }
+    clamp(boid) {
+        boid.point.x = this.wrap(boid.point.x, this.worldSize);
+        boid.point.y = this.wrap(boid.point.y, this.worldSize);
+    }
+    wrap(x, max) {
+        if (x > max) {
+            return x % max;
+        }
+        if (x < 0) {
+            return max + (x % max);
+        }
+        return x;
+    }
+}
+//# sourceMappingURL=flocking.js.map
+
 const loader = new THREE.FileLoader();
 let fragSrc;
 let vertSrc;
 loader.load("./shaders/dude.frag", (d) => fragSrc = d);
 loader.load("./shaders/dude.vert", (d) => vertSrc = d);
-const asBuffer = (a, size) => {
-    const ar = new Float32Array(size);
-    ar.set(flatten(a));
-    return ar;
-};
-const flatten = (a) => {
-    const mapped = a.map((v) => v.toArray());
-    const rslt = [];
-    const ln = mapped[0].length;
-    let j = 0;
-    for (let i = 0; i < mapped.length; i++) {
-        for (j = 0; j < ln; j++) {
-            rslt.push(mapped[i][j]);
-        }
+const flatten = (dest, a) => {
+    if (a.length === 0) {
+        return dest;
     }
-    return rslt;
+    const mapped = a.map((v) => v.toArray());
+    const size = mapped[0].length;
+    for (let i = 0; i < mapped.length; i++) {
+        dest.set(mapped[i], i * size);
+    }
+    return dest;
 };
-class Dude {
+class Dots {
     constructor(count) {
+        this.sizeOfPos = 2;
+        this.sizeOfColor = 3;
         this.currentSize = 0;
         this.scratchVector = new THREE.Vector2(0, 0);
         this.isPosDirty = true;
         this.isColorDirty = true;
         this.bufferSize = count;
         this.positions = [];
+        this.positionBuffer = new Float32Array(count * this.sizeOfPos);
         this.color = [];
+        this.colorBuffer = new Float32Array(count * this.sizeOfColor);
         this.uniforms = { time: { value: 1.0 }, stime: { value: 1.0 } };
-        const base = new THREE.PlaneBufferGeometry(.3, .3, 1, 1);
+        const base = new THREE.PlaneBufferGeometry(1, 1, 1, 1);
         this.geometry = new THREE.InstancedBufferGeometry();
         this.geometry.maxInstancedCount = count;
         this.geometry.index = base.index;
         this.geometry.addAttribute("position", base.getAttribute("position"));
         this.geometry.addAttribute("uv", base.getAttribute("uv"));
-        this.positionAttribute = new THREE.InstancedBufferAttribute(new Float32Array(count * 2), 2);
+        this.positionAttribute = new THREE.InstancedBufferAttribute(this.positionBuffer, this.sizeOfPos);
         this.positionAttribute.setDynamic(true);
-        this.colorAttribute = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+        this.colorAttribute = new THREE.InstancedBufferAttribute(this.colorBuffer, this.sizeOfColor);
         const ids = [];
         for (let i = 0; i < count; i++) {
             ids.push(i);
@@ -69,7 +263,7 @@ class Dude {
     getMesh() {
         return this.mesh;
     }
-    addDude(x, y) {
+    add(x, y) {
         this.positions.push(new THREE.Vector2(x, y));
         this.color.push(new THREE.Vector3(Math.random(), Math.random(), Math.random()));
         this.isPosDirty = true;
@@ -82,8 +276,6 @@ class Dude {
         this.isColorDirty = true;
     }
     update(time) {
-        this.uniforms.time.value += time;
-        this.uniforms.stime.value = Math.sin(this.uniforms.time.value);
         this.rebuild();
     }
     rebuild() {
@@ -96,12 +288,12 @@ class Dude {
         }
         if (this.isPosDirty) {
             this.isPosDirty = false;
-            this.positionAttribute.setArray(asBuffer(this.positions, this.bufferSize * 2));
+            this.positionAttribute.setArray(flatten(this.positionBuffer, this.positions));
             this.positionAttribute.needsUpdate = true;
         }
         if (this.isColorDirty) {
             this.isColorDirty = false;
-            this.colorAttribute.setArray(asBuffer(this.color, this.bufferSize * 3));
+            this.colorAttribute.setArray(flatten(this.colorBuffer, this.color));
             this.colorAttribute.needsUpdate = true;
         }
     }
@@ -119,7 +311,7 @@ class Dude {
         this.isPosDirty = true;
     }
 }
-//# sourceMappingURL=dude.js.map
+//# sourceMappingURL=instancedDots.js.map
 
 class BlendIn {
     constructor(scene, camera, input) {
@@ -128,21 +320,23 @@ class BlendIn {
         this.input = input;
         this.keyBinds = {};
         this.createCube = () => {
-            this.duder.addDude(this.duder.getPosition(0).x, this.duder.getPosition(0).y);
+            this.duder.add(this.duder.getPosition(0).x, this.duder.getPosition(0).y);
         };
         this.dir = new THREE.Vector2(0, 0);
         this.speed = 2;
         this.delta = 0;
-        camera.position.x = 10;
-        camera.position.y = 15;
-        this.duder = new Dude(1000000);
-        // this.duder.addDude(0, 0);
+        this.duder = new Dots(3 * 3);
+        this.flock = new Flocking();
         const sqr = Math.floor(Math.sqrt(this.duder.getBufferSize()));
         for (let i = 0; i < (sqr * sqr); i++) {
-            this.duder.addDude((i % sqr) * 0.1, Math.floor(i / sqr) * 0.1);
+            this.duder.add((i % sqr) * 0.5, Math.floor(i / sqr) * 0.5);
+            this.flock.add(this.duder.getPosition(i));
         }
-        camera.position.x = sqr * 0.05;
-        camera.position.y = sqr * 0.05;
+        // this.flock.add(new THREE.Vector2(2, 2));
+        // console.log(this.flock.selectArea(new Rectangle(0, 0, 5, 5)));
+        camera.position.x = sqr;
+        camera.position.y = sqr;
+        camera.position.z = 40;
         scene.add(this.duder.getMesh());
         input.keyHandler = (code) => { if (this.keyBinds[code] !== undefined) {
             this.keyBinds[code]();
@@ -167,21 +361,16 @@ class BlendIn {
             this.dir.normalize();
         }
     }
-    move() {
-        this.duder.addPosition(0, this.dir.x * this.speed * this.delta, this.dir.y * this.speed * this.delta);
-    }
     update(time) {
         if (!this.pTime) {
             this.pTime = time;
             return;
         }
         this.delta = (time - this.pTime) / 1000;
+        this.flock.update(this.delta);
+        this.duder.isPosDirty = true;
         this.duder.update(this.delta);
         this.handleInput();
-        // this.move();
-        // for (let i = 1; i < this.duder.getCurrentSize(); i++) {
-        //   this.duder.addPosition(i, Math.cos(time / 1000 + i) * 0.01, Math.sin(time / 1000 + i) * 0.01);
-        // }
         this.pTime = time;
     }
 }
@@ -223,9 +412,11 @@ class Input {
 }
 //# sourceMappingURL=input.js.map
 
+const ortho = false;
 window.onload = function () {
     let container;
     let camera;
+    let controller;
     let scene;
     let renderer;
     let input;
@@ -242,12 +433,17 @@ window.onload = function () {
             throw new Error("Failed to find container");
         }
         const aspect = window.innerWidth / window.innerHeight;
-        camera = new THREE.OrthographicCamera(frustumSize * aspect / -2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / -2, 1, 2000);
-        camera.position.set(3, 2.5, 15);
+        if (ortho) {
+            camera = new THREE.OrthographicCamera(frustumSize * aspect / -2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / -2, 1, 2000);
+        }
+        else {
+            camera = new THREE.PerspectiveCamera(30, SCREEN_WIDTH / SCREEN_HEIGHT, 1, 10000);
+        }
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0, 0, 0);
         renderer = new THREE.WebGLRenderer();
         renderer.setPixelRatio(window.devicePixelRatio);
+        controller = new THREE.OrbitControls(camera, renderer.domElement);
         container.appendChild(renderer.domElement);
         input = new Input();
         onWindowResize();
@@ -257,12 +453,23 @@ window.onload = function () {
     }
     function onWindowResize() {
         const aspect = window.innerWidth / window.innerHeight;
-        camera.left = -frustumSize * aspect / 2;
-        camera.right = frustumSize * aspect / 2;
-        camera.top = frustumSize / 2;
-        camera.bottom = -frustumSize / 2;
+        if (isOrtho(camera)) {
+            camera.left = -frustumSize * aspect / 2;
+            camera.right = frustumSize * aspect / 2;
+            camera.top = frustumSize / 2;
+            camera.bottom = -frustumSize / 2;
+        }
+        if (isPers(camera)) {
+            camera.aspect = aspect;
+        }
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    function isOrtho(cam) {
+        return ortho;
+    }
+    function isPers(cam) {
+        return !ortho;
     }
     function animate(timestamp) {
         requestAnimationFrame(animate);
