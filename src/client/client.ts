@@ -34,7 +34,7 @@ window.onload = function () {
       camera = new THREE.OrthographicCamera(
         frustumSize * aspect / - 2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / - 2, 1, 2000);
     } else {
-      camera = new THREE.PerspectiveCamera(30, SCREEN_WIDTH / SCREEN_HEIGHT, 1, 10000);
+      camera = new THREE.PerspectiveCamera(30, SCREEN_WIDTH / SCREEN_HEIGHT, 0.01, 10000);
     }
 
     scene = new THREE.Scene();
@@ -44,6 +44,7 @@ window.onload = function () {
     renderer.setPixelRatio(window.devicePixelRatio);
 
     controller = new THREE.OrbitControls(camera, renderer.domElement);
+    camera.position.set(0, 0, 50);
     container.appendChild(renderer.domElement);
 
     input = new Input();

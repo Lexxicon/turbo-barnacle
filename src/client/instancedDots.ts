@@ -73,7 +73,7 @@ export class Dots {
     this.color = [];
     this.colorBuffer = new Float32Array(count * this.sizeOfColor);
     this.uniforms = { time: { value: 1.0 }, stime: { value: 1.0 } };
-    const base = new THREE.PlaneBufferGeometry(1, 1, 1, 1);
+    const base = new THREE.PlaneBufferGeometry(.5, .5, 1, 1);
 
     this.geometry = new THREE.InstancedBufferGeometry();
     this.geometry.maxInstancedCount = count;

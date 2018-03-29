@@ -6,16 +6,20 @@ import { Rectangle } from "util/rectangle";
 interface BoidMemory {
   point: Vector2;
   direction: Vector2;
+  targetDir: Vector2;
   velocity: number;
+  targetVel: number;
 }
 
 export class Flocking {
 
-  private worldSize = 15;
   private quadTree: QuadTree<BoidMemory>;
   private boids: BoidMemory[];
 
-  constructor() {
+  private maxRot = Math.PI / 4;
+  private maxAccel = 0.1;
+
+  constructor(public worldSize: number) {
     this.quadTree = new QuadTree(new Rectangle(0, 0, this.worldSize, this.worldSize), 4);
     this.boids = [];
   }
@@ -23,12 +27,43 @@ export class Flocking {
   public add(point: Vector2) {
     const b = {
       point,
-      direction: new THREE.Vector2(1, 0),
-      velocity: 0
+      direction: new THREE.Vector2(1, 0).rotateAround(new THREE.Vector2(0, 0), Math.random() * Math.PI * 2),
+      targetDir: new THREE.Vector2(1, 0).rotateAround(new THREE.Vector2(0, 0), Math.random() * Math.PI * 2),
+      velocity: 0,
+      targetVel: .05
     };
 
     this.boids.push(b);
     const add = this.quadTree.add(b);
+  }
+
+  private findAvg(points: Array<{ x: number, y: number }>) {
+    const avg = points.reduce((a, b) => ({ x: a.x + b.x, y: a.y + b.y }), { x: 0, y: 0 });
+    avg.x /= points.length;
+    avg.y /= points.length;
+    return avg;
+  }
+
+  private sub<T extends { loc: { x: number, y: number } }>(b: BoidMemory) {
+    return (a: T) => {
+      a.loc.x -= b.point.x;
+      a.loc.y -= b.point.y;
+
+      return a;
+    };
+  }
+
+  private widen<T extends { a: any, b: any }, K extends T>(a: T): T & { a: any } {
+    return a;
+  }
+
+  private length(a: { x: number, y: number }) {
+    return Math.sqrt(a.x * a.x + a.y * a.y);
+  }
+
+  private addLength<T>(a: T & { loc: { x: number, y: number }, length?: number }): T & { length: number } {
+    a.length = this.length(a.loc);
+    return a as T & { length: number };
   }
 
   public update(delta: number) {
@@ -40,23 +75,34 @@ export class Flocking {
       selectArea.x = boid.point.x - halfSize;
       selectArea.y = boid.point.y - halfSize;
 
-      const nearBy = this.selectArea(selectArea);
-      const avgPoint = nearBy.map((b) => b.loc).reduce((a, b) => ({ x: a.x + b.x, y: a.y + b.y }), { x: 0, y: 0 });
-      avgPoint.x /= nearBy.length;
-      avgPoint.y /= nearBy.length;
-      avgPoint.x -= boid.point.x;
-      avgPoint.y -= boid.point.y;
-      if (nearBy.length > 1 && avgPoint.x === avgPoint.x && avgPoint.y === avgPoint.y) {
-        boid.direction.set(avgPoint.x, avgPoint.y).normalize().negate();
+      let nearBy = this.selectArea(selectArea)
+        .map(this.sub(boid))
+        .map((a) => this.addLength(a));
+
+      nearBy = nearBy.filter((a) => this.length(a.loc) <= sensorSize);
+      const avgLoc = this.findAvg(nearBy.filter((b) => b.length > sensorSize / 2).map((b) => b.loc));
+      const tooClose = this.findAvg(nearBy.filter((b) => b.length < sensorSize / 2).map((b) => b.loc));
+      const avgDir = nearBy.map((e) => e.boid.direction)
+        .reduce((a, b) => a.clone().add(b), new THREE.Vector2(0, 0))
+        .normalize();
+
+      const locVec = new THREE.Vector2(avgLoc.x, avgLoc.y).normalize();
+      const tooCloseVec = new THREE.Vector2(tooClose.x, tooClose.y).normalize();
+      const randomVec = new THREE.Vector2(Math.random() - 0.5, Math.random() - 0.5).normalize();
+      avgDir.multiplyScalar(2);
+      locVec.multiplyScalar(6);
+      tooCloseVec.multiplyScalar(12).negate();
+      randomVec.multiplyScalar(1);
+
+      avgDir.add(locVec).add(tooCloseVec).add(randomVec);
+      avgDir.normalize();
+      if (avgDir.x === avgDir.x && avgDir.y === avgDir.y) {
+        boid.targetDir = avgDir;
       }
-      boid.velocity = delta;
     }
 
-    this.apply();
+    this.apply(delta);
     const r = this.quadTree.validate();
-    if (r.length > 0) {
-      console.log(r[0]);
-    }
     for (const boid of r) {
       this.quadTree.add(boid);
     }
@@ -82,9 +128,15 @@ export class Flocking {
     return nearBy;
   }
 
-  public apply() {
+  public apply(delta: number) {
     const scratch = new THREE.Vector2(0.1, 0.1);
     for (const b of this.boids) {
+      const rotDif = b.targetDir.angle() - b.direction.angle();
+      const rot = Math.sign(rotDif) * Math.min(Math.abs(rotDif), this.maxRot * delta);
+      const accelDif = b.targetVel - b.velocity;
+      const accel = Math.sign(accelDif) * Math.min(Math.abs(accelDif), this.maxAccel * delta);
+      b.direction.rotateAround(scratch.set(0, 0), rot);
+      b.velocity += accel;
       scratch.set(b.direction.x, b.direction.y);
       b.point.add(scratch.multiplyScalar(b.velocity));
       this.clamp(b);

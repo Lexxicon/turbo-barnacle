@@ -118,19 +118,46 @@ class QuadTree {
 //# sourceMappingURL=quadTree.js.map
 
 class Flocking {
-    constructor() {
-        this.worldSize = 15;
+    constructor(worldSize) {
+        this.worldSize = worldSize;
+        this.maxRot = Math.PI / 4;
+        this.maxAccel = 0.1;
         this.quadTree = new QuadTree(new Rectangle(0, 0, this.worldSize, this.worldSize), 4);
         this.boids = [];
     }
     add(point) {
         const b = {
             point,
-            direction: new THREE.Vector2(1, 0),
-            velocity: 0
+            direction: new THREE.Vector2(1, 0).rotateAround(new THREE.Vector2(0, 0), Math.random() * Math.PI * 2),
+            targetDir: new THREE.Vector2(1, 0).rotateAround(new THREE.Vector2(0, 0), Math.random() * Math.PI * 2),
+            velocity: 0,
+            targetVel: .05
         };
         this.boids.push(b);
         const add = this.quadTree.add(b);
+    }
+    findAvg(points) {
+        const avg = points.reduce((a, b) => ({ x: a.x + b.x, y: a.y + b.y }), { x: 0, y: 0 });
+        avg.x /= points.length;
+        avg.y /= points.length;
+        return avg;
+    }
+    sub(b) {
+        return (a) => {
+            a.loc.x -= b.point.x;
+            a.loc.y -= b.point.y;
+            return a;
+        };
+    }
+    widen(a) {
+        return a;
+    }
+    length(a) {
+        return Math.sqrt(a.x * a.x + a.y * a.y);
+    }
+    addLength(a) {
+        a.length = this.length(a.loc);
+        return a;
     }
     update(delta) {
         const sensorSize = 5;
@@ -139,22 +166,30 @@ class Flocking {
         for (const boid of this.boids) {
             selectArea.x = boid.point.x - halfSize;
             selectArea.y = boid.point.y - halfSize;
-            const nearBy = this.selectArea(selectArea);
-            const avgPoint = nearBy.map((b) => b.loc).reduce((a, b) => ({ x: a.x + b.x, y: a.y + b.y }), { x: 0, y: 0 });
-            avgPoint.x /= nearBy.length;
-            avgPoint.y /= nearBy.length;
-            avgPoint.x -= boid.point.x;
-            avgPoint.y -= boid.point.y;
-            if (nearBy.length > 1 && avgPoint.x === avgPoint.x && avgPoint.y === avgPoint.y) {
-                boid.direction.set(avgPoint.x, avgPoint.y).normalize().negate();
+            let nearBy = this.selectArea(selectArea)
+                .map(this.sub(boid))
+                .map((a) => this.addLength(a));
+            nearBy = nearBy.filter((a) => this.length(a.loc) <= sensorSize);
+            const avgLoc = this.findAvg(nearBy.filter((b) => b.length > sensorSize / 2).map((b) => b.loc));
+            const tooClose = this.findAvg(nearBy.filter((b) => b.length < sensorSize / 2).map((b) => b.loc));
+            const avgDir = nearBy.map((e) => e.boid.direction)
+                .reduce((a, b) => a.clone().add(b), new THREE.Vector2(0, 0))
+                .normalize();
+            const locVec = new THREE.Vector2(avgLoc.x, avgLoc.y).normalize();
+            const tooCloseVec = new THREE.Vector2(tooClose.x, tooClose.y).normalize();
+            const randomVec = new THREE.Vector2(Math.random() - 0.5, Math.random() - 0.5).normalize();
+            avgDir.multiplyScalar(2);
+            locVec.multiplyScalar(6);
+            tooCloseVec.multiplyScalar(12).negate();
+            randomVec.multiplyScalar(1);
+            avgDir.add(locVec).add(tooCloseVec).add(randomVec);
+            avgDir.normalize();
+            if (avgDir.x === avgDir.x && avgDir.y === avgDir.y) {
+                boid.targetDir = avgDir;
             }
-            boid.velocity = delta;
         }
-        this.apply();
+        this.apply(delta);
         const r = this.quadTree.validate();
-        if (r.length > 0) {
-            console.log(r[0]);
-        }
         for (const boid of r) {
             this.quadTree.add(boid);
         }
@@ -176,9 +211,15 @@ class Flocking {
         }
         return nearBy;
     }
-    apply() {
+    apply(delta) {
         const scratch = new THREE.Vector2(0.1, 0.1);
         for (const b of this.boids) {
+            const rotDif = b.targetDir.angle() - b.direction.angle();
+            const rot = Math.sign(rotDif) * Math.min(Math.abs(rotDif), this.maxRot * delta);
+            const accelDif = b.targetVel - b.velocity;
+            const accel = Math.sign(accelDif) * Math.min(Math.abs(accelDif), this.maxAccel * delta);
+            b.direction.rotateAround(scratch.set(0, 0), rot);
+            b.velocity += accel;
             scratch.set(b.direction.x, b.direction.y);
             b.point.add(scratch.multiplyScalar(b.velocity));
             this.clamp(b);
@@ -198,7 +239,6 @@ class Flocking {
         return x;
     }
 }
-//# sourceMappingURL=flocking.js.map
 
 const loader = new THREE.FileLoader();
 let fragSrc;
@@ -230,7 +270,7 @@ class Dots {
         this.color = [];
         this.colorBuffer = new Float32Array(count * this.sizeOfColor);
         this.uniforms = { time: { value: 1.0 }, stime: { value: 1.0 } };
-        const base = new THREE.PlaneBufferGeometry(1, 1, 1, 1);
+        const base = new THREE.PlaneBufferGeometry(.5, .5, 1, 1);
         this.geometry = new THREE.InstancedBufferGeometry();
         this.geometry.maxInstancedCount = count;
         this.geometry.index = base.index;
@@ -325,23 +365,28 @@ class BlendIn {
         this.dir = new THREE.Vector2(0, 0);
         this.speed = 2;
         this.delta = 0;
-        this.duder = new Dots(3 * 3);
-        this.flock = new Flocking();
+        this.duder = new Dots(100);
+        this.flock = new Flocking(15);
+        this.createBackground(15, 1);
         const sqr = Math.floor(Math.sqrt(this.duder.getBufferSize()));
         for (let i = 0; i < (sqr * sqr); i++) {
             this.duder.add((i % sqr) * 0.5, Math.floor(i / sqr) * 0.5);
             this.flock.add(this.duder.getPosition(i));
         }
-        // this.flock.add(new THREE.Vector2(2, 2));
-        // console.log(this.flock.selectArea(new Rectangle(0, 0, 5, 5)));
-        camera.position.x = sqr;
-        camera.position.y = sqr;
-        camera.position.z = 40;
         scene.add(this.duder.getMesh());
         input.keyHandler = (code) => { if (this.keyBinds[code] !== undefined) {
             this.keyBinds[code]();
         } };
         this.keyBinds[KeyCodes.KEY_SPACE] = this.createCube;
+    }
+    createBackground(size, buffer) {
+        const g = new THREE.PlaneGeometry(size + buffer, size + buffer);
+        const m = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+        const p = new THREE.Mesh(g, m);
+        p.position.z = -.01;
+        p.position.x = size / 2;
+        p.position.y = size / 2;
+        this.scene.add(p);
     }
     handleInput() {
         this.dir.set(0, 0);
@@ -437,13 +482,14 @@ window.onload = function () {
             camera = new THREE.OrthographicCamera(frustumSize * aspect / -2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / -2, 1, 2000);
         }
         else {
-            camera = new THREE.PerspectiveCamera(30, SCREEN_WIDTH / SCREEN_HEIGHT, 1, 10000);
+            camera = new THREE.PerspectiveCamera(30, SCREEN_WIDTH / SCREEN_HEIGHT, 0.01, 10000);
         }
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0, 0, 0);
         renderer = new THREE.WebGLRenderer();
         renderer.setPixelRatio(window.devicePixelRatio);
         controller = new THREE.OrbitControls(camera, renderer.domElement);
+        camera.position.set(0, 0, 50);
         container.appendChild(renderer.domElement);
         input = new Input();
         onWindowResize();
@@ -480,6 +526,7 @@ window.onload = function () {
         stats.update();
     }
 };
+//# sourceMappingURL=client.js.map
 
 })));
 //# sourceMappingURL=client.js.map

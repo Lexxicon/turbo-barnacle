@@ -23,26 +23,31 @@ export class BlendIn {
     this.speed = 2;
     this.delta = 0;
 
-    this.duder = new Dots(3 * 3);
-    this.flock = new Flocking();
+    this.duder = new Dots(100);
+    this.flock = new Flocking(15);
+    this.createBackground(15, 1);
 
     const sqr = Math.floor(Math.sqrt(this.duder.getBufferSize()));
     for (let i = 0; i < (sqr * sqr); i++) {
       this.duder.add((i % sqr) * 0.5, Math.floor(i / sqr) * 0.5);
       this.flock.add(this.duder.getPosition(i));
     }
-    // this.flock.add(new THREE.Vector2(2, 2));
-    // console.log(this.flock.selectArea(new Rectangle(0, 0, 5, 5)));
-
-    camera.position.x = sqr;
-    camera.position.y = sqr;
-    camera.position.z = 40;
 
     scene.add(this.duder.getMesh());
 
     input.keyHandler = (code) => { if (this.keyBinds[code] !== undefined) { this.keyBinds[code](); } };
 
     this.keyBinds[KeyCodes.KEY_SPACE] = this.createCube;
+  }
+
+  private createBackground(size: number, buffer: number) {
+    const g = new THREE.PlaneGeometry(size + buffer, size + buffer);
+    const m = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    const p = new THREE.Mesh(g, m);
+    p.position.z = -.01;
+    p.position.x = size / 2;
+    p.position.y = size / 2;
+    this.scene.add(p);
   }
 
   public createCube = () => {
