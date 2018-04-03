@@ -5,11 +5,20 @@ import { Rectangle } from "util/rectangle";
 
 interface BoidMemory {
   point: Vector2;
-  direction: Vector2;
-  targetDir: Vector2;
-  velocity: number;
-  targetVel: number;
+  velocity: Vector2;
+  acceleration: Vector2;
 }
+
+interface NearResult {
+  loc: { x: number, y: number };
+  boid: BoidMemory;
+  length: number;
+}
+const sensorSize = 5;
+const wantedSeparation = 1;
+const neighborSize = 5;
+const maxSpeed = .1;
+const maxForce = .05;
 
 export class Flocking {
 
@@ -24,13 +33,15 @@ export class Flocking {
     this.boids = [];
   }
 
+  private randomAngle() {
+    return new THREE.Vector2(1, 0).rotateAround(new THREE.Vector2(0, 0), Math.random() * Math.PI * 2);
+  }
+
   public add(point: Vector2) {
     const b = {
       point,
-      direction: new THREE.Vector2(1, 0).rotateAround(new THREE.Vector2(0, 0), Math.random() * Math.PI * 2),
-      targetDir: new THREE.Vector2(1, 0).rotateAround(new THREE.Vector2(0, 0), Math.random() * Math.PI * 2),
-      velocity: 0,
-      targetVel: .05
+      velocity: this.randomAngle(),
+      acceleration: this.randomAngle(),
     };
 
     this.boids.push(b);
@@ -53,10 +64,6 @@ export class Flocking {
     };
   }
 
-  private widen<T extends { a: any, b: any }, K extends T>(a: T): T & { a: any } {
-    return a;
-  }
-
   private length(a: { x: number, y: number }) {
     return Math.sqrt(a.x * a.x + a.y * a.y);
   }
@@ -66,8 +73,53 @@ export class Flocking {
     return a as T & { length: number };
   }
 
+  private separateDir(boid: BoidMemory, nearBy: NearResult[]) {
+    const result = new THREE.Vector2(0, 0);
+    if (nearBy.length === 0) { return result; }
+
+    const scratch = new THREE.Vector2(0, 0);
+
+    for (const n of nearBy) {
+      scratch.set(n.loc.x, n.loc.y);
+      scratch.normalize().divideScalar(n.length);
+      result.add(scratch);
+    }
+
+    result.normalize();
+    result.multiplyScalar(-maxSpeed);
+    result.clampLength(0, maxForce);
+
+    return result;
+  }
+
+  private alignDir(boid: BoidMemory, nearBy: NearResult[]) {
+    const result = new THREE.Vector2(0, 0);
+    if (nearBy.length === 0) { return result; }
+
+    nearBy.filter((p) => p.length < neighborSize).forEach((p) => result.add(p.boid.velocity));
+
+    result.normalize();
+    result.multiplyScalar(maxSpeed);
+    result.sub(boid.velocity);
+    result.clampLength(0, maxForce);
+    return result;
+  }
+
+  private cohesion(boid: BoidMemory, nearBy: NearResult[]) {
+    let result = new THREE.Vector2(0, 0);
+    if (nearBy.length === 0) { return result; }
+
+    const scratch = new THREE.Vector2(0, 0);
+    nearBy.forEach((e) => {
+      result.add(scratch.set(e.loc.x, e.loc.y));
+    });
+
+    result.divideScalar(nearBy.length);
+    result = this.seek(boid.point, boid.velocity, result);
+    return result;
+  }
+
   public update(delta: number) {
-    const sensorSize = 5;
     const halfSize = sensorSize / 2;
     const selectArea = new Rectangle(0, 0, sensorSize, sensorSize);
 
@@ -75,37 +127,54 @@ export class Flocking {
       selectArea.x = boid.point.x - halfSize;
       selectArea.y = boid.point.y - halfSize;
 
-      let nearBy = this.selectArea(selectArea)
+      const nearBy: NearResult[] = this.selectArea(selectArea)
         .map(this.sub(boid))
-        .map((a) => this.addLength(a));
+        .map((a) => this.addLength(a))
+        .filter((a) => a.length <= sensorSize && a.length !== 0);
 
-      nearBy = nearBy.filter((a) => this.length(a.loc) <= sensorSize);
-      const avgLoc = this.findAvg(nearBy.filter((b) => b.length > sensorSize / 2).map((b) => b.loc));
-      const tooClose = this.findAvg(nearBy.filter((b) => b.length < sensorSize / 2).map((b) => b.loc));
-      const avgDir = nearBy.map((e) => e.boid.direction)
-        .reduce((a, b) => a.clone().add(b), new THREE.Vector2(0, 0))
-        .normalize();
+      const sepForce = this.separateDir(boid, nearBy.filter((a) => a.length < wantedSeparation));
+      sepForce.multiplyScalar(1.5);
+      const alignForce = this.alignDir(boid, nearBy);
+      const cohesionForce = this.cohesion(boid, nearBy);
 
-      const locVec = new THREE.Vector2(avgLoc.x, avgLoc.y).normalize();
-      const tooCloseVec = new THREE.Vector2(tooClose.x, tooClose.y).normalize();
-      const randomVec = new THREE.Vector2(Math.random() - 0.5, Math.random() - 0.5).normalize();
-      avgDir.multiplyScalar(2);
-      locVec.multiplyScalar(6);
-      tooCloseVec.multiplyScalar(12).negate();
-      randomVec.multiplyScalar(1);
-
-      avgDir.add(locVec).add(tooCloseVec).add(randomVec);
-      avgDir.normalize();
-      if (avgDir.x === avgDir.x && avgDir.y === avgDir.y) {
-        boid.targetDir = avgDir;
-      }
+      boid.acceleration.add(sepForce);
+      boid.acceleration.add(alignForce);
+      boid.acceleration.add(cohesionForce);
     }
 
     this.apply(delta);
+
+    // rebuild quad tree after we've moved everything
     const r = this.quadTree.validate();
     for (const boid of r) {
       this.quadTree.add(boid);
     }
+  }
+
+  private hasNans(t: Vector2) {
+    return t.x !== t.x || t.y !== t.y;
+  }
+
+  public apply(delta: number) {
+    const scratch = new THREE.Vector2(0.1, 0.1);
+    for (const b of this.boids) {
+      b.velocity.add(b.acceleration.multiplyScalar(0.01));
+      b.acceleration.set(0, 0);
+      b.velocity.clampLength(0, maxSpeed);
+      b.point.add(b.velocity);
+      this.wrapBoid(b);
+    }
+  }
+
+  private seek(position: Vector2, velocity: Vector2, target: Vector2) {
+    const result = new THREE.Vector2();
+    result.copy(target);
+
+    result.normalize();
+    result.multiplyScalar(maxSpeed);
+    result.sub(velocity);
+    result.clampLength(0, maxForce);
+    return result;
   }
 
   public selectArea(selectArea: Rectangle) {
@@ -120,7 +189,10 @@ export class Flocking {
         selectArea.x = origin.x + offsetX;
         selectArea.y = origin.y + offsetY;
         const rslt = this.quadTree.select(selectArea)
-          .map((b) => ({ loc: { x: b.point.x - offsetX, y: b.point.y - offsetY }, boid: b }));
+          .map((b) => ({
+            loc: { x: b.point.x - offsetX, y: b.point.y - offsetY },
+            boid: b
+          }));
         merge(nearBy, rslt);
       }
     }
@@ -128,22 +200,7 @@ export class Flocking {
     return nearBy;
   }
 
-  public apply(delta: number) {
-    const scratch = new THREE.Vector2(0.1, 0.1);
-    for (const b of this.boids) {
-      const rotDif = b.targetDir.angle() - b.direction.angle();
-      const rot = Math.sign(rotDif) * Math.min(Math.abs(rotDif), this.maxRot * delta);
-      const accelDif = b.targetVel - b.velocity;
-      const accel = Math.sign(accelDif) * Math.min(Math.abs(accelDif), this.maxAccel * delta);
-      b.direction.rotateAround(scratch.set(0, 0), rot);
-      b.velocity += accel;
-      scratch.set(b.direction.x, b.direction.y);
-      b.point.add(scratch.multiplyScalar(b.velocity));
-      this.clamp(b);
-    }
-  }
-
-  private clamp(boid: BoidMemory) {
+  private wrapBoid(boid: BoidMemory) {
     boid.point.x = this.wrap(boid.point.x, this.worldSize);
     boid.point.y = this.wrap(boid.point.y, this.worldSize);
 

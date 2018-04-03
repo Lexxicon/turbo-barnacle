@@ -25,7 +25,7 @@ export class BlendIn {
 
     this.duder = new Dots(100);
     this.flock = new Flocking(15);
-    this.createBackground(15, 1);
+    // this.createBackground(15, 1);
 
     const sqr = Math.floor(Math.sqrt(this.duder.getBufferSize()));
     for (let i = 0; i < (sqr * sqr); i++) {
@@ -37,7 +37,7 @@ export class BlendIn {
 
     input.keyHandler = (code) => { if (this.keyBinds[code] !== undefined) { this.keyBinds[code](); } };
 
-    this.keyBinds[KeyCodes.KEY_SPACE] = this.createCube;
+    this.keyBinds[KeyCodes.KEY_SPACE] = () => this.flock.update(this.delta);
   }
 
   private createBackground(size: number, buffer: number) {

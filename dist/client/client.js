@@ -117,6 +117,11 @@ class QuadTree {
 }
 //# sourceMappingURL=quadTree.js.map
 
+const sensorSize = 5;
+const wantedSeparation = 1;
+const neighborSize = 5;
+const maxSpeed = .1;
+const maxForce = .05;
 class Flocking {
     constructor(worldSize) {
         this.worldSize = worldSize;
@@ -125,13 +130,14 @@ class Flocking {
         this.quadTree = new QuadTree(new Rectangle(0, 0, this.worldSize, this.worldSize), 4);
         this.boids = [];
     }
+    randomAngle() {
+        return new THREE.Vector2(1, 0).rotateAround(new THREE.Vector2(0, 0), Math.random() * Math.PI * 2);
+    }
     add(point) {
         const b = {
             point,
-            direction: new THREE.Vector2(1, 0).rotateAround(new THREE.Vector2(0, 0), Math.random() * Math.PI * 2),
-            targetDir: new THREE.Vector2(1, 0).rotateAround(new THREE.Vector2(0, 0), Math.random() * Math.PI * 2),
-            velocity: 0,
-            targetVel: .05
+            velocity: this.randomAngle(),
+            acceleration: this.randomAngle(),
         };
         this.boids.push(b);
         const add = this.quadTree.add(b);
@@ -149,9 +155,6 @@ class Flocking {
             return a;
         };
     }
-    widen(a) {
-        return a;
-    }
     length(a) {
         return Math.sqrt(a.x * a.x + a.y * a.y);
     }
@@ -159,40 +162,93 @@ class Flocking {
         a.length = this.length(a.loc);
         return a;
     }
+    separateDir(boid, nearBy) {
+        const result = new THREE.Vector2(0, 0);
+        if (nearBy.length === 0) {
+            return result;
+        }
+        const scratch = new THREE.Vector2(0, 0);
+        for (const n of nearBy) {
+            scratch.set(n.loc.x, n.loc.y);
+            scratch.normalize().divideScalar(n.length);
+            result.add(scratch);
+        }
+        result.normalize();
+        result.multiplyScalar(-maxSpeed);
+        result.clampLength(0, maxForce);
+        return result;
+    }
+    alignDir(boid, nearBy) {
+        const result = new THREE.Vector2(0, 0);
+        if (nearBy.length === 0) {
+            return result;
+        }
+        nearBy.filter((p) => p.length < neighborSize).forEach((p) => result.add(p.boid.velocity));
+        result.normalize();
+        result.multiplyScalar(maxSpeed);
+        result.sub(boid.velocity);
+        result.clampLength(0, maxForce);
+        return result;
+    }
+    cohesion(boid, nearBy) {
+        let result = new THREE.Vector2(0, 0);
+        if (nearBy.length === 0) {
+            return result;
+        }
+        const scratch = new THREE.Vector2(0, 0);
+        nearBy.forEach((e) => {
+            result.add(scratch.set(e.loc.x, e.loc.y));
+        });
+        result.divideScalar(nearBy.length);
+        result = this.seek(boid.point, boid.velocity, result);
+        return result;
+    }
     update(delta) {
-        const sensorSize = 5;
         const halfSize = sensorSize / 2;
         const selectArea = new Rectangle(0, 0, sensorSize, sensorSize);
         for (const boid of this.boids) {
             selectArea.x = boid.point.x - halfSize;
             selectArea.y = boid.point.y - halfSize;
-            let nearBy = this.selectArea(selectArea)
+            const nearBy = this.selectArea(selectArea)
                 .map(this.sub(boid))
-                .map((a) => this.addLength(a));
-            nearBy = nearBy.filter((a) => this.length(a.loc) <= sensorSize);
-            const avgLoc = this.findAvg(nearBy.filter((b) => b.length > sensorSize / 2).map((b) => b.loc));
-            const tooClose = this.findAvg(nearBy.filter((b) => b.length < sensorSize / 2).map((b) => b.loc));
-            const avgDir = nearBy.map((e) => e.boid.direction)
-                .reduce((a, b) => a.clone().add(b), new THREE.Vector2(0, 0))
-                .normalize();
-            const locVec = new THREE.Vector2(avgLoc.x, avgLoc.y).normalize();
-            const tooCloseVec = new THREE.Vector2(tooClose.x, tooClose.y).normalize();
-            const randomVec = new THREE.Vector2(Math.random() - 0.5, Math.random() - 0.5).normalize();
-            avgDir.multiplyScalar(2);
-            locVec.multiplyScalar(6);
-            tooCloseVec.multiplyScalar(12).negate();
-            randomVec.multiplyScalar(1);
-            avgDir.add(locVec).add(tooCloseVec).add(randomVec);
-            avgDir.normalize();
-            if (avgDir.x === avgDir.x && avgDir.y === avgDir.y) {
-                boid.targetDir = avgDir;
-            }
+                .map((a) => this.addLength(a))
+                .filter((a) => a.length <= sensorSize && a.length !== 0);
+            const sepForce = this.separateDir(boid, nearBy.filter((a) => a.length < wantedSeparation));
+            sepForce.multiplyScalar(1.5);
+            const alignForce = this.alignDir(boid, nearBy);
+            const cohesionForce = this.cohesion(boid, nearBy);
+            boid.acceleration.add(sepForce);
+            boid.acceleration.add(alignForce);
+            boid.acceleration.add(cohesionForce);
         }
         this.apply(delta);
+        // rebuild quad tree after we've moved everything
         const r = this.quadTree.validate();
         for (const boid of r) {
             this.quadTree.add(boid);
         }
+    }
+    hasNans(t) {
+        return t.x !== t.x || t.y !== t.y;
+    }
+    apply(delta) {
+        const scratch = new THREE.Vector2(0.1, 0.1);
+        for (const b of this.boids) {
+            b.velocity.add(b.acceleration.multiplyScalar(0.01));
+            b.acceleration.set(0, 0);
+            b.velocity.clampLength(0, maxSpeed);
+            b.point.add(b.velocity);
+            this.wrapBoid(b);
+        }
+    }
+    seek(position, velocity, target) {
+        const result = new THREE.Vector2();
+        result.copy(target);
+        result.normalize();
+        result.multiplyScalar(maxSpeed);
+        result.sub(velocity);
+        result.clampLength(0, maxForce);
+        return result;
     }
     selectArea(selectArea) {
         const nearBy = [];
@@ -205,27 +261,16 @@ class Flocking {
                 selectArea.x = origin.x + offsetX;
                 selectArea.y = origin.y + offsetY;
                 const rslt = this.quadTree.select(selectArea)
-                    .map((b) => ({ loc: { x: b.point.x - offsetX, y: b.point.y - offsetY }, boid: b }));
+                    .map((b) => ({
+                    loc: { x: b.point.x - offsetX, y: b.point.y - offsetY },
+                    boid: b
+                }));
                 merge(nearBy, rslt);
             }
         }
         return nearBy;
     }
-    apply(delta) {
-        const scratch = new THREE.Vector2(0.1, 0.1);
-        for (const b of this.boids) {
-            const rotDif = b.targetDir.angle() - b.direction.angle();
-            const rot = Math.sign(rotDif) * Math.min(Math.abs(rotDif), this.maxRot * delta);
-            const accelDif = b.targetVel - b.velocity;
-            const accel = Math.sign(accelDif) * Math.min(Math.abs(accelDif), this.maxAccel * delta);
-            b.direction.rotateAround(scratch.set(0, 0), rot);
-            b.velocity += accel;
-            scratch.set(b.direction.x, b.direction.y);
-            b.point.add(scratch.multiplyScalar(b.velocity));
-            this.clamp(b);
-        }
-    }
-    clamp(boid) {
+    wrapBoid(boid) {
         boid.point.x = this.wrap(boid.point.x, this.worldSize);
         boid.point.y = this.wrap(boid.point.y, this.worldSize);
     }
@@ -367,7 +412,7 @@ class BlendIn {
         this.delta = 0;
         this.duder = new Dots(100);
         this.flock = new Flocking(15);
-        this.createBackground(15, 1);
+        // this.createBackground(15, 1);
         const sqr = Math.floor(Math.sqrt(this.duder.getBufferSize()));
         for (let i = 0; i < (sqr * sqr); i++) {
             this.duder.add((i % sqr) * 0.5, Math.floor(i / sqr) * 0.5);
@@ -377,7 +422,7 @@ class BlendIn {
         input.keyHandler = (code) => { if (this.keyBinds[code] !== undefined) {
             this.keyBinds[code]();
         } };
-        this.keyBinds[KeyCodes.KEY_SPACE] = this.createCube;
+        this.keyBinds[KeyCodes.KEY_SPACE] = () => this.flock.update(this.delta);
     }
     createBackground(size, buffer) {
         const g = new THREE.PlaneGeometry(size + buffer, size + buffer);
