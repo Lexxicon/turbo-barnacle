@@ -7,7 +7,7 @@ const ortho = false;
 window.onload = function () {
   let container: HTMLElement | null;
   let camera: OrthographicCamera | PerspectiveCamera;
-  let controller: OrbitControls;
+  // let controller: OrbitControls;
   let scene: Scene;
   let renderer: WebGLRenderer;
   let input: Input;
@@ -43,7 +43,6 @@ window.onload = function () {
     renderer = new THREE.WebGLRenderer();
     renderer.setPixelRatio(window.devicePixelRatio);
 
-    controller = new THREE.OrbitControls(camera, renderer.domElement);
     camera.position.set(0, 0, 50);
     container.appendChild(renderer.domElement);
 
@@ -53,6 +52,7 @@ window.onload = function () {
     window.addEventListener("resize", onWindowResize, false);
     container.appendChild(stats.dom);
     game = new BlendIn(scene, camera, input);
+    // controller = new THREE.OrbitControls(camera, renderer.domElement);
   }
 
   function onWindowResize() {

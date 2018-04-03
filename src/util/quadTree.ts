@@ -13,7 +13,11 @@ export class QuadTree<T extends Entry> {
   private split: boolean = false;
   private subTree: Array<QuadTree<T>> = [];
 
-  constructor(public bounds: Rectangle, public thresh: number, private parent?: QuadTree<T>) { }
+  constructor(
+    public bounds: Rectangle,
+    public thresh: number,
+    private maxDepth: number,
+    private parent?: QuadTree<T>) { }
 
   public validate(): T[] {
     let removed: T[] = [];
@@ -51,8 +55,17 @@ export class QuadTree<T extends Entry> {
       return result;
     }
 
-    this.content.filter((e) => area.contains(e.point)).forEach((e) => result.push(e));
-    this.subTree.map((tree) => tree.select(area)).forEach((e) => merge(result, e));
+    // this.content.filter((e) => area.contains(e.point)).forEach((e) => result.push(e));
+    for (let i = 0; i < this.content.length; i++) {
+      if (area.contains(this.content[i].point)) {
+        result.push(this.content[i]);
+      }
+    }
+
+    // this.subTree.map((tree) => tree.select(area)).forEach((e) => merge(result, e));
+    for (let i = 0; i < this.subTree.length; i++) {
+      merge(result, this.subTree[i].select(area));
+    }
 
     return result;
   }
@@ -66,7 +79,7 @@ export class QuadTree<T extends Entry> {
       return false;
     }
 
-    if (this.content.length < this.thresh) {
+    if (this.content.length < this.thresh || this.maxDepth === 0) {
       this.content.push(item);
       return true;
     }
@@ -92,9 +105,21 @@ export class QuadTree<T extends Entry> {
     const y = this.bounds.y;
     const halfW = this.bounds.w / 2;
     const halfH = this.bounds.h / 2;
-    this.subTree.push(new QuadTree<T>(new Rectangle(x, y, halfH, halfW), this.thresh, this));
-    this.subTree.push(new QuadTree<T>(new Rectangle(x + halfW, y, halfH, halfW), this.thresh, this));
-    this.subTree.push(new QuadTree<T>(new Rectangle(x + halfW, y + halfH, halfH, halfW), this.thresh, this));
-    this.subTree.push(new QuadTree<T>(new Rectangle(x, y + halfH, halfH, halfW), this.thresh, this));
+    this.subTree.push(
+      new QuadTree<T>(
+        new Rectangle(x, y, halfH, halfW),
+        this.thresh, this.maxDepth - 1, this));
+    this.subTree.push(
+      new QuadTree<T>(
+        new Rectangle(x + halfW, y, halfH, halfW),
+        this.thresh, this.maxDepth - 1, this));
+    this.subTree.push(
+      new QuadTree<T>(
+        new Rectangle(x + halfW, y + halfH, halfH, halfW),
+        this.thresh, this.maxDepth - 1, this));
+    this.subTree.push(
+      new QuadTree<T>(
+        new Rectangle(x, y + halfH, halfH, halfW),
+        this.thresh, this.maxDepth - 1, this));
   }
 }

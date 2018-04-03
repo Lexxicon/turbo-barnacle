@@ -33,9 +33,10 @@ class Rectangle {
 
 const merge = (a, b) => Array.prototype.push.apply(a, b);
 class QuadTree {
-    constructor(bounds, thresh, parent) {
+    constructor(bounds, thresh, maxDepth, parent) {
         this.bounds = bounds;
         this.thresh = thresh;
+        this.maxDepth = maxDepth;
         this.parent = parent;
         this.content = [];
         this.split = false;
@@ -75,8 +76,16 @@ class QuadTree {
         if (!area.intersects(this.bounds)) {
             return result;
         }
-        this.content.filter((e) => area.contains(e.point)).forEach((e) => result.push(e));
-        this.subTree.map((tree) => tree.select(area)).forEach((e) => merge(result, e));
+        // this.content.filter((e) => area.contains(e.point)).forEach((e) => result.push(e));
+        for (let i = 0; i < this.content.length; i++) {
+            if (area.contains(this.content[i].point)) {
+                result.push(this.content[i]);
+            }
+        }
+        // this.subTree.map((tree) => tree.select(area)).forEach((e) => merge(result, e));
+        for (let i = 0; i < this.subTree.length; i++) {
+            merge(result, this.subTree[i].select(area));
+        }
         return result;
     }
     size() {
@@ -86,7 +95,7 @@ class QuadTree {
         if (!this.bounds.contains(item.point)) {
             return false;
         }
-        if (this.content.length < this.thresh) {
+        if (this.content.length < this.thresh || this.maxDepth === 0) {
             this.content.push(item);
             return true;
         }
@@ -109,16 +118,16 @@ class QuadTree {
         const y = this.bounds.y;
         const halfW = this.bounds.w / 2;
         const halfH = this.bounds.h / 2;
-        this.subTree.push(new QuadTree(new Rectangle(x, y, halfH, halfW), this.thresh, this));
-        this.subTree.push(new QuadTree(new Rectangle(x + halfW, y, halfH, halfW), this.thresh, this));
-        this.subTree.push(new QuadTree(new Rectangle(x + halfW, y + halfH, halfH, halfW), this.thresh, this));
-        this.subTree.push(new QuadTree(new Rectangle(x, y + halfH, halfH, halfW), this.thresh, this));
+        this.subTree.push(new QuadTree(new Rectangle(x, y, halfH, halfW), this.thresh, this.maxDepth - 1, this));
+        this.subTree.push(new QuadTree(new Rectangle(x + halfW, y, halfH, halfW), this.thresh, this.maxDepth - 1, this));
+        this.subTree.push(new QuadTree(new Rectangle(x + halfW, y + halfH, halfH, halfW), this.thresh, this.maxDepth - 1, this));
+        this.subTree.push(new QuadTree(new Rectangle(x, y + halfH, halfH, halfW), this.thresh, this.maxDepth - 1, this));
     }
 }
 //# sourceMappingURL=quadTree.js.map
 
 const sensorSize = 5;
-const wantedSeparation = 1;
+const wantedSeparation = 1.6;
 const neighborSize = 5;
 const maxSpeed = .1;
 const maxForce = .05;
@@ -127,11 +136,11 @@ class Flocking {
         this.worldSize = worldSize;
         this.maxRot = Math.PI / 4;
         this.maxAccel = 0.1;
-        this.quadTree = new QuadTree(new Rectangle(0, 0, this.worldSize, this.worldSize), 4);
+        this.quadTree = new QuadTree(new Rectangle(0, 0, this.worldSize, this.worldSize), 13, 4);
         this.boids = [];
     }
     randomAngle() {
-        return new THREE.Vector2(1, 0).rotateAround(new THREE.Vector2(0, 0), Math.random() * Math.PI * 2);
+        return new THREE.Vector2((Math.random() + 0.1) * 2 - 1, (Math.random() + 0.1) * 2 - 1).normalize();
     }
     add(point) {
         const b = {
@@ -170,7 +179,7 @@ class Flocking {
         const scratch = new THREE.Vector2(0, 0);
         for (const n of nearBy) {
             scratch.set(n.loc.x, n.loc.y);
-            scratch.normalize().divideScalar(n.length);
+            scratch.normalize().divideScalar(n.length * n.length);
             result.add(scratch);
         }
         result.normalize();
@@ -214,7 +223,7 @@ class Flocking {
                 .map((a) => this.addLength(a))
                 .filter((a) => a.length <= sensorSize && a.length !== 0);
             const sepForce = this.separateDir(boid, nearBy.filter((a) => a.length < wantedSeparation));
-            sepForce.multiplyScalar(1.5);
+            sepForce.multiplyScalar(1.1);
             const alignForce = this.alignDir(boid, nearBy);
             const cohesionForce = this.cohesion(boid, nearBy);
             boid.acceleration.add(sepForce);
@@ -234,7 +243,7 @@ class Flocking {
     apply(delta) {
         const scratch = new THREE.Vector2(0.1, 0.1);
         for (const b of this.boids) {
-            b.velocity.add(b.acceleration.multiplyScalar(0.01));
+            b.velocity.add(b.acceleration.multiplyScalar(0.05));
             b.acceleration.set(0, 0);
             b.velocity.clampLength(0, maxSpeed);
             b.point.add(b.velocity);
@@ -252,7 +261,6 @@ class Flocking {
     }
     selectArea(selectArea) {
         const nearBy = [];
-        const merge = (target, arr) => Array.prototype.push.apply(target, arr);
         const origin = { x: selectArea.x, y: selectArea.y };
         for (let i = -1; i <= 1; i++) {
             for (let j = -1; j <= 1; j++) {
@@ -265,23 +273,14 @@ class Flocking {
                     loc: { x: b.point.x - offsetX, y: b.point.y - offsetY },
                     boid: b
                 }));
-                merge(nearBy, rslt);
+                nearBy.push(...rslt);
             }
         }
         return nearBy;
     }
     wrapBoid(boid) {
-        boid.point.x = this.wrap(boid.point.x, this.worldSize);
-        boid.point.y = this.wrap(boid.point.y, this.worldSize);
-    }
-    wrap(x, max) {
-        if (x > max) {
-            return x % max;
-        }
-        if (x < 0) {
-            return max + (x % max);
-        }
-        return x;
+        boid.point.x = (this.worldSize + boid.point.x) % this.worldSize;
+        boid.point.y = (this.worldSize + boid.point.y) % this.worldSize;
     }
 }
 
@@ -338,6 +337,7 @@ class Dots {
             fragmentShader: fragSrc
         });
         this.mesh = new THREE.Mesh(this.geometry, this.material);
+        this.mesh.frustumCulled = false;
     }
     getCurrentSize() {
         return this.currentSize;
@@ -404,25 +404,30 @@ class BlendIn {
         this.camera = camera;
         this.input = input;
         this.keyBinds = {};
+        this.worldSize = 45;
+        this.target = 1000;
+        this.settingUp = true;
+        this.count = 0;
         this.createCube = () => {
             this.duder.add(this.duder.getPosition(0).x, this.duder.getPosition(0).y);
         };
+        this.camera.translateX(this.worldSize / 2);
+        this.camera.translateY(this.worldSize / 2);
+        this.camera.translateZ(75);
+        this.camera.updateMatrix();
+        this.camera.lookAt(this.worldSize / 2, this.worldSize / 2, 0);
         this.dir = new THREE.Vector2(0, 0);
         this.speed = 2;
         this.delta = 0;
-        this.duder = new Dots(100);
-        this.flock = new Flocking(15);
-        // this.createBackground(15, 1);
-        const sqr = Math.floor(Math.sqrt(this.duder.getBufferSize()));
-        for (let i = 0; i < (sqr * sqr); i++) {
-            this.duder.add((i % sqr) * 0.5, Math.floor(i / sqr) * 0.5);
-            this.flock.add(this.duder.getPosition(i));
-        }
+        this.duder = new Dots(this.target);
+        this.flock = new Flocking(this.worldSize);
+        // this.createBackground(this.worldSize, 1);
+        this.sqr = Math.floor(Math.sqrt(this.duder.getBufferSize()));
         scene.add(this.duder.getMesh());
         input.keyHandler = (code) => { if (this.keyBinds[code] !== undefined) {
             this.keyBinds[code]();
         } };
-        this.keyBinds[KeyCodes.KEY_SPACE] = () => this.flock.update(this.delta);
+        // this.keyBinds[KeyCodes.KEY_SPACE] = () => this.flock.update(this.delta);
     }
     createBackground(size, buffer) {
         const g = new THREE.PlaneGeometry(size + buffer, size + buffer);
@@ -455,6 +460,14 @@ class BlendIn {
         if (!this.pTime) {
             this.pTime = time;
             return;
+        }
+        if (this.settingUp) {
+            for (let i = 0; i < 100 && this.count < this.target; i++) {
+                this.duder.add(Math.random() * this.worldSize, Math.random() * this.worldSize);
+                this.flock.add(this.duder.getPosition(this.count));
+                this.count++;
+            }
+            this.settingUp = this.count < this.target;
         }
         this.delta = (time - this.pTime) / 1000;
         this.flock.update(this.delta);
@@ -506,7 +519,7 @@ const ortho = false;
 window.onload = function () {
     let container;
     let camera;
-    let controller;
+    // let controller: OrbitControls;
     let scene;
     let renderer;
     let input;
@@ -533,7 +546,6 @@ window.onload = function () {
         scene.background = new THREE.Color(0, 0, 0);
         renderer = new THREE.WebGLRenderer();
         renderer.setPixelRatio(window.devicePixelRatio);
-        controller = new THREE.OrbitControls(camera, renderer.domElement);
         camera.position.set(0, 0, 50);
         container.appendChild(renderer.domElement);
         input = new Input();
@@ -541,6 +553,7 @@ window.onload = function () {
         window.addEventListener("resize", onWindowResize, false);
         container.appendChild(stats.dom);
         game = new BlendIn(scene, camera, input);
+        // controller = new THREE.OrbitControls(camera, renderer.domElement);
     }
     function onWindowResize() {
         const aspect = window.innerWidth / window.innerHeight;

@@ -1,5 +1,5 @@
 import * as KeyCodes from "keycode-js";
-import { Camera, Mesh, Scene, Vector2 } from "three";
+import { Camera, Mesh, OrbitControls, Scene, Vector2 } from "three";
 import * as THREE from "three";
 import { QuadTree } from "util/quadTree";
 import { Rectangle } from "util/rectangle";
@@ -18,26 +18,34 @@ export class BlendIn {
 
   private keyBinds: { [code: number]: () => void } = {};
 
+  private worldSize = 45;
+  private target = 1000;
+
+  private settingUp = true;
+  private sqr: number;
+  private count: number = 0;
+
   constructor(private scene: Scene, private camera: Camera, private input: Input) {
+    this.camera.translateX(this.worldSize / 2);
+    this.camera.translateY(this.worldSize / 2);
+    this.camera.translateZ(75);
+    this.camera.updateMatrix();
+    this.camera.lookAt(this.worldSize / 2, this.worldSize / 2, 0);
     this.dir = new THREE.Vector2(0, 0);
     this.speed = 2;
     this.delta = 0;
 
-    this.duder = new Dots(100);
-    this.flock = new Flocking(15);
-    // this.createBackground(15, 1);
+    this.duder = new Dots(this.target);
+    this.flock = new Flocking(this.worldSize);
+    // this.createBackground(this.worldSize, 1);
 
-    const sqr = Math.floor(Math.sqrt(this.duder.getBufferSize()));
-    for (let i = 0; i < (sqr * sqr); i++) {
-      this.duder.add((i % sqr) * 0.5, Math.floor(i / sqr) * 0.5);
-      this.flock.add(this.duder.getPosition(i));
-    }
+    this.sqr = Math.floor(Math.sqrt(this.duder.getBufferSize()));
 
     scene.add(this.duder.getMesh());
 
     input.keyHandler = (code) => { if (this.keyBinds[code] !== undefined) { this.keyBinds[code](); } };
 
-    this.keyBinds[KeyCodes.KEY_SPACE] = () => this.flock.update(this.delta);
+    // this.keyBinds[KeyCodes.KEY_SPACE] = () => this.flock.update(this.delta);
   }
 
   private createBackground(size: number, buffer: number) {
@@ -78,6 +86,14 @@ export class BlendIn {
     if (!this.pTime) {
       this.pTime = time;
       return;
+    }
+    if (this.settingUp) {
+      for (let i = 0; i < 100 && this.count < this.target; i++) {
+        this.duder.add(Math.random() * this.worldSize, Math.random() * this.worldSize);
+        this.flock.add(this.duder.getPosition(this.count));
+        this.count++;
+      }
+      this.settingUp = this.count < this.target;
     }
     this.delta = (time - this.pTime) / 1000;
 

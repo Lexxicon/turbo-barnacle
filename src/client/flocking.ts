@@ -15,7 +15,7 @@ interface NearResult {
   length: number;
 }
 const sensorSize = 5;
-const wantedSeparation = 1;
+const wantedSeparation = 1.6;
 const neighborSize = 5;
 const maxSpeed = .1;
 const maxForce = .05;
@@ -29,12 +29,12 @@ export class Flocking {
   private maxAccel = 0.1;
 
   constructor(public worldSize: number) {
-    this.quadTree = new QuadTree(new Rectangle(0, 0, this.worldSize, this.worldSize), 4);
+    this.quadTree = new QuadTree(new Rectangle(0, 0, this.worldSize, this.worldSize), 13, 4);
     this.boids = [];
   }
 
   private randomAngle() {
-    return new THREE.Vector2(1, 0).rotateAround(new THREE.Vector2(0, 0), Math.random() * Math.PI * 2);
+    return new THREE.Vector2((Math.random() + 0.1) * 2 - 1, (Math.random() + 0.1) * 2 - 1).normalize();
   }
 
   public add(point: Vector2) {
@@ -81,7 +81,7 @@ export class Flocking {
 
     for (const n of nearBy) {
       scratch.set(n.loc.x, n.loc.y);
-      scratch.normalize().divideScalar(n.length);
+      scratch.normalize().divideScalar(n.length * n.length);
       result.add(scratch);
     }
 
@@ -133,7 +133,7 @@ export class Flocking {
         .filter((a) => a.length <= sensorSize && a.length !== 0);
 
       const sepForce = this.separateDir(boid, nearBy.filter((a) => a.length < wantedSeparation));
-      sepForce.multiplyScalar(1.5);
+      sepForce.multiplyScalar(1.1);
       const alignForce = this.alignDir(boid, nearBy);
       const cohesionForce = this.cohesion(boid, nearBy);
 
@@ -158,7 +158,7 @@ export class Flocking {
   public apply(delta: number) {
     const scratch = new THREE.Vector2(0.1, 0.1);
     for (const b of this.boids) {
-      b.velocity.add(b.acceleration.multiplyScalar(0.01));
+      b.velocity.add(b.acceleration.multiplyScalar(0.05));
       b.acceleration.set(0, 0);
       b.velocity.clampLength(0, maxSpeed);
       b.point.add(b.velocity);
@@ -180,7 +180,6 @@ export class Flocking {
   public selectArea(selectArea: Rectangle) {
     interface Wrapper { loc: { x: number, y: number }; boid: BoidMemory; }
     const nearBy: Wrapper[] = [];
-    const merge = (target: Wrapper[], arr: Wrapper[]) => Array.prototype.push.apply(target, arr);
     const origin = { x: selectArea.x, y: selectArea.y };
     for (let i = -1; i <= 1; i++) {
       for (let j = -1; j <= 1; j++) {
@@ -193,7 +192,7 @@ export class Flocking {
             loc: { x: b.point.x - offsetX, y: b.point.y - offsetY },
             boid: b
           }));
-        merge(nearBy, rslt);
+        nearBy.push(...rslt);
       }
     }
 
@@ -201,20 +200,8 @@ export class Flocking {
   }
 
   private wrapBoid(boid: BoidMemory) {
-    boid.point.x = this.wrap(boid.point.x, this.worldSize);
-    boid.point.y = this.wrap(boid.point.y, this.worldSize);
+    boid.point.x = (this.worldSize + boid.point.x) % this.worldSize;
+    boid.point.y = (this.worldSize + boid.point.y) % this.worldSize;
 
-  }
-
-  private wrap(x: number, max: number) {
-    if (x > max) {
-      return x % max;
-    }
-
-    if (x < 0) {
-      return max + (x % max);
-    }
-
-    return x;
   }
 }
