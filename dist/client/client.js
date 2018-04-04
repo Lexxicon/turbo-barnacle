@@ -223,9 +223,11 @@ class Flocking {
                 .map((a) => this.addLength(a))
                 .filter((a) => a.length <= sensorSize && a.length !== 0);
             const sepForce = this.separateDir(boid, nearBy.filter((a) => a.length < wantedSeparation));
-            sepForce.multiplyScalar(1.1);
+            sepForce.multiplyScalar(.3);
             const alignForce = this.alignDir(boid, nearBy);
+            alignForce.multiplyScalar(.2);
             const cohesionForce = this.cohesion(boid, nearBy);
+            cohesionForce.multiplyScalar(.2);
             boid.acceleration.add(sepForce);
             boid.acceleration.add(alignForce);
             boid.acceleration.add(cohesionForce);
@@ -404,8 +406,8 @@ class BlendIn {
         this.camera = camera;
         this.input = input;
         this.keyBinds = {};
-        this.worldSize = 45;
-        this.target = 1000;
+        this.worldSize = 90;
+        this.target = 2000;
         this.settingUp = true;
         this.count = 0;
         this.createCube = () => {
@@ -413,7 +415,7 @@ class BlendIn {
         };
         this.camera.translateX(this.worldSize / 2);
         this.camera.translateY(this.worldSize / 2);
-        this.camera.translateZ(75);
+        this.camera.translateZ(145);
         this.camera.updateMatrix();
         this.camera.lookAt(this.worldSize / 2, this.worldSize / 2, 0);
         this.dir = new THREE.Vector2(0, 0);

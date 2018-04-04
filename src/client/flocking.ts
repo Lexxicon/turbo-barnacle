@@ -133,9 +133,11 @@ export class Flocking {
         .filter((a) => a.length <= sensorSize && a.length !== 0);
 
       const sepForce = this.separateDir(boid, nearBy.filter((a) => a.length < wantedSeparation));
-      sepForce.multiplyScalar(1.1);
+      sepForce.multiplyScalar(.3);
       const alignForce = this.alignDir(boid, nearBy);
+      alignForce.multiplyScalar(.2);
       const cohesionForce = this.cohesion(boid, nearBy);
+      cohesionForce.multiplyScalar(.2);
 
       boid.acceleration.add(sepForce);
       boid.acceleration.add(alignForce);

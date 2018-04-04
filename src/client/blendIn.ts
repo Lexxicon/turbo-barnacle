@@ -18,8 +18,8 @@ export class BlendIn {
 
   private keyBinds: { [code: number]: () => void } = {};
 
-  private worldSize = 45;
-  private target = 1000;
+  private worldSize = 90;
+  private target = 2000;
 
   private settingUp = true;
   private sqr: number;
@@ -28,7 +28,7 @@ export class BlendIn {
   constructor(private scene: Scene, private camera: Camera, private input: Input) {
     this.camera.translateX(this.worldSize / 2);
     this.camera.translateY(this.worldSize / 2);
-    this.camera.translateZ(75);
+    this.camera.translateZ(145);
     this.camera.updateMatrix();
     this.camera.lookAt(this.worldSize / 2, this.worldSize / 2, 0);
     this.dir = new THREE.Vector2(0, 0);
