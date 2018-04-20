@@ -4,6 +4,7 @@ import { QuadTree } from "util/quadTree";
 import { Rectangle } from "util/rectangle";
 
 interface BoidMemory {
+  id: number;
   point: Vector2;
   velocity: Vector2;
   acceleration: Vector2;
@@ -39,6 +40,7 @@ export class Flocking {
 
   public add(point: Vector2) {
     const b = {
+      id: this.boids.length,
       point,
       velocity: this.randomAngle(),
       acceleration: this.randomAngle(),
@@ -68,8 +70,9 @@ export class Flocking {
     return Math.sqrt(a.x * a.x + a.y * a.y);
   }
 
-  private addLength<T>(a: T & { loc: { x: number, y: number }, length?: number }): T & { length: number } {
+  private addLength<T extends { loc: { x: number, y: number } }>(a: T & { length?: number }): T & { length: number } {
     a.length = this.length(a.loc);
+
     return a as T & { length: number };
   }
 
@@ -126,7 +129,6 @@ export class Flocking {
     for (const boid of this.boids) {
       selectArea.x = boid.point.x - halfSize;
       selectArea.y = boid.point.y - halfSize;
-
       const nearBy: NearResult[] = this.selectArea(selectArea)
         .map(this.sub(boid))
         .map((a) => this.addLength(a))

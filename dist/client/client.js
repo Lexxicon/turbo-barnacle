@@ -144,6 +144,7 @@ class Flocking {
     }
     add(point) {
         const b = {
+            id: this.boids.length,
             point,
             velocity: this.randomAngle(),
             acceleration: this.randomAngle(),
